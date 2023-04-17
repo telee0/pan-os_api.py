@@ -2,13 +2,13 @@
 
 """
 
-pan-os_api v2.0 [20220728]
+pan-os_api v2.1 [20230417]
 
 Scripts to generate PA/Panorama config
 
     by Terence LEE <telee.hk@gmail.com>
 
-Details at https://github.com/telee0/pan-os_api.git
+Details at https://github.com/telee0/pan-os_api.py.git
 
 """
 
@@ -61,7 +61,17 @@ def pan_vpn_ike_gw():
         data['xml'][0] = data['xml'][0] % xpath
         data['clean_xml'][0] = data['clean_xml'][0] % xpath
 
-    # static parameters: move them back to the loop when they become dynamic
+    # flatten the interface list, and check if number of interfaces < N_NET_IKE
+    #
+    interfaces = []
+    for if_name, if_i, if_n in cf['IKE_INTERFACE_LIST']:
+        for if_j in range(if_i, if_n + 1):
+            interfaces.append(if_name.format(if_j))
+    if len(interfaces) < n:
+        print("pan_vpn_ike_gw: IKE_INTERFACE_LIST: insufficient interfaces for assignment")
+        return
+
+    # shared parameters: move them back to the loop when they become dynamic
     #
     ike_key = cf['IKE_PRESHARED_KEY']
 
@@ -76,23 +86,26 @@ def pan_vpn_ike_gw():
     local_prefix = cf['IKE_IP_LOCAL_PREFIX']
     peer_prefix = cf['IKE_IP_PEER_PREFIX']
 
+    ip_octet_i = cf['IKE_IP_OCTET_i']
+    ip_octet_j = cf['IKE_IP_OCTET_j']
+
     # static variables in the loop
     #
     s = n // 10  # increment per slice: 10%, 20%, etc..
 
-    ike = 1
+    for ike in range(n):
+        if ip_octet_j > 255:
+            ip_octet_j = 0
+            ip_octet_i += 1
 
-    for i in range(256):
-        for j in range(256):
-            if ike > n:
-                break  # 2
+        ike_name = cf['IKE_NAME'].format(ike + cf['IKE_NAME_i'])
+        ike_iface = interfaces[ike]
+        ip_local = cf['IKE_IP_LOCAL'].format(ip_octet_i, ip_octet_j)
+        ip_peer = cf['IKE_IP_PEER'].format(ip_octet_i, ip_octet_j)
 
-            ike_name = cf['IKE_NAME'] % ike
-            ike_iface = cf['IKE_INTERFACE'].format(ike)
-            ip_local = cf['IKE_IP_LOCAL'].format(i, j)
-            ip_peer = cf['IKE_IP_PEER'].format(i, j)
+        ip_octet_j += 1
 
-            element_a = f"""
+        element_a = f"""
             <entry name='{ike_name}'>
               <authentication>
                 <pre-shared-key>
@@ -131,7 +144,7 @@ def pan_vpn_ike_gw():
               </peer-address>
             </entry>"""
 
-            element_b = f"""
+        element_b = f"""
             <entry name='{ike_name}'>
               <authentication>
                 <pre-shared-key>
@@ -170,26 +183,23 @@ def pan_vpn_ike_gw():
               </peer-address>
             </entry>"""
 
-            clean_element = "@name='{0}' or ".format(ike_name)
+        clean_element = f"@name='{ike_name}' or "
 
-            data_a['xml'].append(element_a)
-            data_a['clean_xml'].append(clean_element)
-            data_b['xml'].append(element_b)
-            data_b['clean_xml'].append(clean_element)
+        data_a['xml'].append(element_a)
+        data_a['clean_xml'].append(clean_element)
+        data_b['xml'].append(element_b)
+        data_b['clean_xml'].append(clean_element)
 
-            time_elapsed = timeit.default_timer() - ti
+        time_elapsed = timeit.default_timer() - ti
 
-            if time_elapsed > 1:
-                print('.', end="", flush=True)
-                ti = timeit.default_timer()
+        if time_elapsed > 1:
+            print('.', end="", flush=True)
+            ti = timeit.default_timer()
 
-            if n > cf['LARGE_N'] and ike % s == 0:
-                print("{:.0%}".format(ike / n), end="", flush=True)
+        count = ike + 1
 
-            ike += 1
-        else:
-            continue
-        break
+        if n > cf['LARGE_N'] and count % s == 0:
+            print("{:.0%}".format(count / n), end="", flush=True)
 
     for data in [data_a, data_b]:
         data['clean_xml'].append("@name='_z']")

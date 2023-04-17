@@ -2,13 +2,13 @@
 
 """
 
-pan-os_api v2.0 [20220728]
+pan-os_api v2.1 [20230417]
 
 Scripts to generate PA/Panorama config
 
     by Terence LEE <telee.hk@gmail.com>
 
-Details at https://github.com/telee0/pan-os_api.git
+Details at https://github.com/telee0/pan-os_api.py.git
 
 """
 
@@ -63,10 +63,14 @@ def pan_vpn_ipsec_tun():
         data['xml_route'][0] = data['xml_route'][0] % xpath_route
         data['clean_xml_route'][0] = data['clean_xml_route'][0] % xpath_route
 
-    # static parameters: move them back to the loop when they become dynamic
+    # shared parameters: move them back to the loop when they become dynamic
     #
     # IPSec specific
     #
+    ipsec_crypto_pfile = ""
+    if 'IPSEC_CRYPTO_PROFILE' in cf and cf['IPSEC_CRYPTO_PROFILE'] not in ("", "default"):
+        ipsec_crypto_pfile = "<ipsec-crypto-profile>{0}</ipsec-crypto-profile>".format(cf['IPSEC_CRYPTO_PROFILE'])
+
     anti_replay = cf['IPSEC_REPLAY_PROTECTION']
 
     # proxy ID specific
@@ -90,9 +94,9 @@ def pan_vpn_ipsec_tun():
         if ipsec > n:
             break
 
-        ipsec_name = cf['IPSEC_NAME'].format(i)
-        tunnel_interface = cf['IPSEC_TUNNEL_INTERFACE'].format(i)
-        ike_gateway = cf['IPSEC_IKE_GATEWAY'].format(i)
+        ipsec_name = cf['IPSEC_NAME'].format(i + cf['IPSEC_NAME_i'] - 1)
+        tunnel_interface = cf['IPSEC_TUNNEL_INTERFACE'].format(i + cf['IPSEC_TUNNEL_INTERFACE_i'] - 1)
+        ike_gateway = cf['IPSEC_IKE_GATEWAY'].format(i + cf['IPSEC_IKE_GATEWAY_i'] - 1)
 
         proxy_id_a, proxy_id_b = "", ""
 
@@ -104,8 +108,8 @@ def pan_vpn_ipsec_tun():
 
                 proxy_id_name = cf['IPSEC_PROXY_ID_NAME'] % (i, j)
 
-                local = cf['IPSEC_IP_LOCAL'] % (i, j)
-                remote = cf['IPSEC_IP_REMOTE'] % (i, j)
+                local = cf['IPSEC_IP_LOCAL'].format(i, j)
+                remote = cf['IPSEC_IP_REMOTE'].format(i, j)
 
                 p_a.append(f"""
                   <entry name='{proxy_id_name}'>
@@ -142,6 +146,7 @@ def pan_vpn_ipsec_tun():
                 <ike-gateway>
                   <entry name='{ike_gateway}'/>
                 </ike-gateway>
+                {ipsec_crypto_pfile}
                 {proxy_id_a}
               </auto-key>
               <tunnel-monitor>
@@ -157,6 +162,7 @@ def pan_vpn_ipsec_tun():
                 <ike-gateway>
                   <entry name='{ike_gateway}'/>
                 </ike-gateway>
+                {ipsec_crypto_pfile}
                 {proxy_id_b}
               </auto-key>
               <tunnel-monitor>
@@ -166,7 +172,7 @@ def pan_vpn_ipsec_tun():
               <anti-replay>{anti_replay}</anti-replay>
             </entry>"""
 
-        clean_element = "@name='{0}' or ".format(ipsec_name)
+        clean_element = f"@name='{ipsec_name}' or "
 
         data_a['xml'].append(element_a)
         data_a['clean_xml'].append(clean_element)
@@ -175,14 +181,14 @@ def pan_vpn_ipsec_tun():
 
         # routes
         #
-        route_name = "Tunnel_Route-{0}".format(i)
+        route_name = f"Tunnel_Route-{i + cf['IPSEC_ROUTE_i'] - 1}"
 
-        dst_a = remote_net % (i, 0)
-        dst_b = local_net % (i, 0)
+        dst_a = remote_net.format(i, 0)
+        dst_b = local_net.format(i, 0)
 
         route_a = f"""
                   <entry name='{route_name}'>
-                    <interface>tunnel.{i}</interface>
+                    <interface>{tunnel_interface}</interface>
                     <metric>10</metric>
                     <destination>{dst_a}</destination>
                     <route-table>
@@ -192,7 +198,7 @@ def pan_vpn_ipsec_tun():
 
         route_b = f"""
                   <entry name='{route_name}'>
-                    <interface>tunnel.{i}</interface>
+                    <interface>{tunnel_interface}</interface>
                     <metric>10</metric>
                     <destination>{dst_b}</destination>
                     <route-table>
@@ -200,7 +206,7 @@ def pan_vpn_ipsec_tun():
                     </route-table>
                   </entry>"""
 
-        clean_route = "@name='{0}' or ".format(route_name)
+        clean_route = f"@name='{route_name}' or "
 
         data_a['xml_route'].append(route_a)
         data_a['clean_xml_route'].append(clean_route)

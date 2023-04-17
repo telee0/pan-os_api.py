@@ -2,13 +2,13 @@
 
 """
 
-pan-os_api v2.0 [20220728]
+pan-os_api v2.1 [20230417]
 
 Scripts to generate PA/Panorama config
 
     by Terence LEE <telee.hk@gmail.com>
 
-Details at https://github.com/telee0/pan-os_api.git
+Details at https://github.com/telee0/pan-os_api.py.git
 
 """
 

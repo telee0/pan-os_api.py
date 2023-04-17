@@ -2,13 +2,13 @@
 
 """
 
-pan-os_api v2.0 [20220728]
+pan-os_api v2.1 [20230417]
 
 Scripts to generate PA/Panorama config
 
     by Terence LEE <telee.hk@gmail.com>
 
-Details at https://github.com/telee0/pan-os_api.git
+Details at https://github.com/telee0/pan-os_api.py.git
 
 """
 
@@ -43,7 +43,6 @@ def pan_net_if_lo():
 
     x = cf['XPATH_TPL']
     lhost = cf['LHOST']
-    # if_name = cf['IF_LOOPBACK_NAME']
     vsys = cf['VSYS']
     zone = cf['IF_LOOPBACK_ZONE']
     vr = cf['IF_LOOPBACK_VR']
@@ -70,53 +69,53 @@ def pan_net_if_lo():
     #
     s = n // 10  # increment per slice: 10%, 20%, etc..
 
-    interfaces = 1
+    for if_i in range(n):
+        if ip_octet_j > 255:
+            ip_octet_j = 0
+            ip_octet_i += 1
 
-    for i in range(ip_octet_i, 256):
-        for j in range(ip_octet_j, 256):
-            if interfaces > n:
-                break  # 2
+        if_name = "loopback.{0}".format(if_i + cf['IF_LOOPBACK_NAME_i'])
 
-            interface_name = "loopback.{0}".format(interfaces)
-            interface_ip = cf['IF_LOOPBACK_IP'].format(i, j)
-
+        if 'IF_LOOPBACK_IP' in cf \
+                and cf['IF_LOOPBACK_IP'] is not None \
+                and len(cf['IF_LOOPBACK_IP']) > 0:
+            if_ip = cf['IF_LOOPBACK_IP'].format(ip_octet_i, ip_octet_j)
+            ip_octet_j += 1
             element = f"""
-              <entry name='{interface_name}'>
+              <entry name='{if_name}'>
                 <adjust-tcp-mss>
                   <enable>no</enable>
                 </adjust-tcp-mss>
                 <ip>
-                  <entry name='{interface_ip}'/>
+                  <entry name='{if_ip}'/>
                 </ip>
-              </entry>"""  # .format(interface_name, interface_ip)
-
-            clean_element = "@name='{0}' or ".format(interface_name)
-
-            data['xml'].append(element)
-            data['clean_xml'].append(clean_element)
-            data['dump'].append(element)
-
-            element = "<member>{0}</member>".format(interface_name)
-            clean_element = "text()='{0}' or ".format(interface_name)
-
-            for asso in associations:
-                data['xml_' + asso].append(element)
-                data['clean_xml_' + asso].append(clean_element)
-
-            time_elapsed = timeit.default_timer() - ti
-
-            if time_elapsed > 1:
-                print('.', end="", flush=True)
-                ti = timeit.default_timer()
-
-            if n > cf['LARGE_N'] and interfaces % s == 0:
-                print("{:.0%}".format(interfaces / n), end="", flush=True)
-
-            interfaces += 1
+              </entry>"""
         else:
-            ip_octet_j = 0  # normalize j for next i
-            continue
-        break
+            element = f"<entry name='{if_name}'/>"
+
+        clean_element = f"@name='{if_name}' or "
+
+        data['xml'].append(element)
+        data['clean_xml'].append(clean_element)
+        data['dump'].append(element)
+
+        element = f"<member>{if_name}</member>"
+        clean_element = f"text()='{if_name}' or "
+
+        for asso in associations:
+            data['xml_' + asso].append(element)
+            data['clean_xml_' + asso].append(clean_element)
+
+        time_elapsed = timeit.default_timer() - ti
+
+        if time_elapsed > 1:
+            print('.', end="", flush=True)
+            ti = timeit.default_timer()
+
+        count = if_i + 1
+
+        if n > cf['LARGE_N'] and count % s == 0:
+            print("{:.0%}".format(count / n), end="", flush=True)
 
     data['clean_xml'].append("@name='_z']")
     for asso in associations:
