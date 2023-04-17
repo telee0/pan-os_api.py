@@ -1,4 +1,4 @@
-# pan-os_api
+# pan-os_api.py
 
 Scripts rewritten in Python to generate PAN XML config and apply it through REST API
 
