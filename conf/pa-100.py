@@ -2,7 +2,7 @@
 
 """
 
-pan-os_api v2.1 [20230417]
+pan-os_api v2.2 [20230717]
 
 Scripts to generate PA/Panorama config
 
@@ -21,6 +21,7 @@ Network > Interfaces > Ethernet   (with vsys, zone and vr assignment)
 Network > Interfaces > Loopback   (with vsys, zone and vr assignment)
 Network > Interfaces > Tunnel     (with vsys, zone and vr assignment)
 Network > Zones
+Network > DNS Proxy
 Network > IKE Gateways
 Network > IPSec Tunnels (with static routes through tunnels)
 Objects > Addresses
@@ -53,14 +54,16 @@ cf = {
     'PA1': {
         'HOST': "192.168.1.100",
         'USER': "admin",
-        'PASS': "admin",
+        'PASS': "",           # this can be overridden from the environment variable see the next key PASSENV
+        'PASSENV': 'PAPASS',  # name of the environment variable for the password
         'DESC': "main device to be configured"
     },
 
     'PA2': {
         'HOST': "192.168.1.101",
         'USER': "admin",
-        'PASS': "admin",
+        'PASS': "",           # this can be overridden from the environment variable see the next key PASSENV
+        'PASSENV': 'PAPASS',  # name of the environment variable for the password
         'DESC': "second device as the VPN peer"
     },
 
@@ -95,6 +98,7 @@ cf.update({
     'N_NET_IF_LOOPBACK': 10,
     'N_NET_IF_TUNNEL': 32,
     'N_NET_ZONES': 0,
+    'N_NET_DNS_PROXY': 10,
 
     # IPSec VPN
     #
@@ -197,6 +201,14 @@ cf.update({
     'ZONE_NAME': "Zone-%03d",
     'ZONE_UID': True,  # True or False, True to enable User-ID
 
+    # 'N_NET_DNS_PROXY': 0,
+    'DNS_PROXY_NAME': "DNS-%d",
+    'DNS_PROXY_PRIMARY': "1.1.1.1",  # primary DNS server IP
+    'DNS_PROXY_SECONDARY': "8.8.8.8",  # secondary DNS server IP
+    'DNS_PROXY_STATIC_ENTRIES': 100,  # number of static entries
+    'DNS_PROXY_STATIC_FQDN': "h%d.poc.com",  # FQDN of static entries
+    'DNS_PROXY_STATIC_ADDR': "88.88.88.88",  # IP of static entries
+
     # --------------------------------------------------------------------------------
     #
     # VPN configuration: IKE gateways and IPSec tunnels
@@ -209,8 +221,8 @@ cf.update({
     # 'IKE_INTERFACE_LIST': [("loopback.{0}", 1, 16],    # loopback interfaces
     # 'IKE_IP_LOCAL': "127.{0}.{1}.1",
     # 'IKE_IP_PEER': "127.{0}.{1}.2",
-    # 'IKE_INTERFACE_LIST': [("ethernet1/2", 1, 1],      # ethernet interfaces
-    # 'IKE_INTERFACE_LIST': [("ethernet1/{0}", 1, 32)],  # list of interfaces: ethernet1/1, ethernet1/2, ..
+    # 'IKE_INTERFACE_LIST': [("ethernet1/2", 1, 1)],     # ethernet/2
+    # 'IKE_INTERFACE_LIST': [("ethernet1/{0}", 1, 32)],  # ethernet1/1, .., ethernet1/32
     'IKE_INTERFACE_LIST': [("ethernet1/25.{0}", 1, 16), ("ethernet1/26.{0}", 1, 16)],  # list of heterogeneous interfaces
     'IKE_IP_LOCAL': "{1}.{1}.0.1",  # $j.$j.0.1/24
     'IKE_IP_LOCAL_PREFIX': "/30",
