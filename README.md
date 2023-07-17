@@ -6,8 +6,6 @@ Scripts rewritten in Python to generate PAN XML config and apply it through REST
 python3 pan.py -c conf/pa-100.py
 ```
 
----
-
 Supported config as follows.
 
 * Device > Local users
@@ -15,6 +13,7 @@ Supported config as follows.
 * Network > Interfaces > Loopback   (with vsys, zone and vr assignment)
 * Network > Interfaces > Tunnel     (with vsys, zone and vr assignment)
 * Network > Zones
+* Network > DNS Proxy
 * Network > IKE Gateways
 * Network > IPSec Tunnels (with static routes through tunnels)
 * Objects > Addresses
@@ -34,6 +33,4 @@ Supported config as follows.
 * Panorama > Device Groups
 * Panorama > Templates
 
-Features and Capacity, All PAN-OS Releases
-https://loop.paloaltonetworks.com/docs/DOC-3950
-
+---
