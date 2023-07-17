@@ -2,7 +2,7 @@
 
 """
 
-pan-os_api v2.1 [20230417]
+pan-os_api v2.2 [20230717]
 
 Scripts to generate PA/Panorama config
 
@@ -30,6 +30,15 @@ def init():
     if 'TARGET' not in cf:
         print("init: TARGET not set. Please review config file {}.".format(cf['CF_PATH']))
         exit(1)
+
+    # pass from environment variables
+    #
+    e, p = 'PASSENV', 'PASS'
+
+    for pa in ['PA1', 'PA2']:
+        pass_ = os.getenv(cf[pa][e]) if e in cf[pa] else None
+        if pass_ is not None and len(pass_) > 0:
+            cf[pa][p] = pass_
 
     # parameters defined in code to just save config effort
     #
@@ -129,7 +138,7 @@ def write_job_files():
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(prog='pan.py', description='Script to generate PA/Panorama config.')
-    parser.add_argument('-c', '--conf', nargs='?', type=str, default="conf/pan-245.py", help="config file")
+    parser.add_argument('-c', '--conf', nargs='?', type=str, default="conf/pa.py", help="config file")
     parser.add_argument('-v', '--verbose', action='store_true', help="verbose mode")
     parser.add_argument('password', nargs='?')
     parser.print_help()
@@ -157,6 +166,7 @@ if __name__ == '__main__':
     import pan_net_if_eth
     import pan_net_if_lo
     import pan_net_if_tun
+    import pan_net_dns_proxy
     import pan_rules_sec
     import pan_rules_nat
     import pan_rules_pbf
@@ -179,6 +189,7 @@ if __name__ == '__main__':
     pan_net_if_eth.go()
     pan_net_if_lo.go()
     pan_net_if_tun.go()
+    pan_net_dns_proxy.go()
     pan_rules_sec.go()
     pan_rules_nat.go()
     pan_rules_pbf.go()

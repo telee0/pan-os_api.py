@@ -2,7 +2,7 @@
 
 """
 
-pan-os_api v2.1 [20230417]
+pan-os_api v2.2 [20230717]
 
 Scripts to generate PA/Panorama config
 
@@ -38,7 +38,7 @@ def pan_net_zones():
     data['dump'].append("<vsys><entry name='{0}'><zone>".format(vsys))
 
     if 'XPATH_TPL' not in cf:
-        print("pan_net_if_lo: XPATH_TPL not set: Panorama template not specified")
+        print("pan_net_zones: XPATH_TPL not set: Panorama template not specified")
         return
 
     x = cf['XPATH_TPL']

@@ -2,7 +2,7 @@
 
 """
 
-pan-os_api v2.1 [20230417]
+pan-os_api v2.2 [20230717]
 
 Scripts to generate PA/Panorama config
 
