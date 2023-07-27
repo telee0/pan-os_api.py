@@ -71,7 +71,10 @@ def init_data(pre, associations=(), target='PA1', seq=0):
     wget = cf['_cmds']['wget']
     url = cf[target]['URL']
 
-    api_set = "type=config&action=set&key={0}&{1}&element="
+    if pre == "uid":  # UID is exceptional
+        api_set = "type=user-id&key={0}&cmd="
+    else:
+        api_set = "type=config&action=set&key={0}&{1}&element="
     api_del = "type=config&action=delete&key={0}&{1}/entry["
     api_key = cf[target]['KEY']
 
