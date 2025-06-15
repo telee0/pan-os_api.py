@@ -3,7 +3,7 @@
 Scripts rewritten in Python to generate PAN XML config and apply it through REST API
 
 ```
-python3 pan.py -c conf/pa.py
+python3 pan.py -c conf/pa.py -h 192.168.1.1 -u admin -v
 ```
 
 Supported config as follows.
