@@ -2,7 +2,7 @@
 
 """
 
-pan-os_api v2.2 [20230717]
+pan-os_api v2.3 [20250607]
 
 Scripts to generate PA/Panorama config
 
@@ -14,6 +14,7 @@ Details at https://github.com/telee0/pan-os_api.py.git
 
 from pan_data import init_data, write_data
 from pan_data import gen_xpath
+from pan_ip import generate_net, generate_ip_ranges
 import timeit
 
 verbose, debug = True, False
@@ -55,48 +56,38 @@ def pan_obj_addr(dg=None, seq=0):
     s = n // 10  # increment per slice: 10%, 20%, etc..
     suf = f"-{seq}" if seq > 0 else ''
 
+    address_list = []
+
+    if addr_type == 'ip-netmask':
+        address_list = generate_net(cf['ADDR_ADDRESS'], n, with_prefix=True)
+    elif addr_type == 'ip-range':
+        address_list = generate_ip_ranges(cf['ADDR_ADDRESS'], n, cf['ADDR_RANGE_SIZE'], with_prefix=False)
+    elif addr_type == 'fqdn':
+        address_list = [cf['ADDR_ADDRESS'].format(i) for i in range(1, n + 1)]  # 1-based
+
     addresses = 1
 
-    for i in range(256):
-        for j in range(256):
-            if addresses > n:
-                break  # 2
+    for i in range(n):
+        addr_name = (cf['ADDR_NAME'] + suf) % addresses
+        address = address_list[i]
 
-            addr_name = (cf['ADDR_NAME'] + suf) % addresses
-            address = ""
+        element = "<entry name='{0}'><{1}>{2}</{1}></entry>".format(addr_name, addr_type, address)
+        clean_element = "@name='{0}' or ".format(addr_name)
 
-            if addr_type == 'ip-netmask':
-                address = cf['ADDR_ADDRESS'] % (i, j)
-            elif addr_type == 'ip-range':
-                if j >= 254:
-                    continue  # j too large to be used, reset
-                k = min(j + cf['ADDR_RANGE'] - 1, 254)
-                addr_from = cf['ADDR_ADDRESS'] % (i, j)
-                addr_to = cf['ADDR_ADDRESS'] % (i, k)
-                address = "{0}-{1}".format(addr_from, addr_to)
-            elif addr_type == 'fqdn':
-                address = cf['ADDR_ADDRESS'] % (j, i)  # j comes first
+        data['xml'].append(element)
+        data['clean_xml'].append(clean_element)
+        data['dump'].append(element)
 
-            element = "<entry name='{0}'><{1}>{2}</{1}></entry>".format(addr_name, addr_type, address)
-            clean_element = "@name='{0}' or ".format(addr_name)
+        time_elapsed = timeit.default_timer() - ti
 
-            data['xml'].append(element)
-            data['clean_xml'].append(clean_element)
-            data['dump'].append(element)
+        if time_elapsed > 1:
+            print('.', end="", flush=True)
+            ti = timeit.default_timer()
 
-            time_elapsed = timeit.default_timer() - ti
+        if n > cf['LARGE_N'] and addresses % s == 0:
+            print("{:.0%}".format(addresses / n), end="", flush=True)
 
-            if time_elapsed > 1:
-                print('.', end="", flush=True)
-                ti = timeit.default_timer()
-
-            if n > cf['LARGE_N'] and addresses % s == 0:
-                print("{:.0%}".format(addresses / n), end="", flush=True)
-
-            addresses += 1
-        else:
-            continue
-        break
+        addresses += 1
 
     data['clean_xml'].append("@name='_z']")
     data['dump'].append("</address>")
@@ -107,7 +98,6 @@ def pan_obj_addr(dg=None, seq=0):
 
 
 def go():
-
     # 1. PA 1 vsys
     # 2. PA all vsys
     # 3. PA shared

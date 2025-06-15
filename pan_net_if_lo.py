@@ -2,7 +2,7 @@
 
 """
 
-pan-os_api v2.2 [20230717]
+pan-os_api v2.3 [20250607]
 
 Scripts to generate PA/Panorama config
 
@@ -12,7 +12,9 @@ Details at https://github.com/telee0/pan-os_api.py.git
 
 """
 
-from pan_data import init_data, write_data
+from pan_data import init_data, write_data, push_data
+from pan_ip import generate_loopback, ip_version
+import json
 import timeit
 
 verbose, debug = True, False
@@ -62,37 +64,51 @@ def pan_net_if_lo():
         data['xml'+a][0] = data['xml'+a][0] % x
         data['clean_xml'+a][0] = data['clean_xml'+a][0] % x
 
-    ip_octet_i = cf['IF_LOOPBACK_IP_OCTET_i']
-    ip_octet_j = cf['IF_LOOPBACK_IP_OCTET_j']
+    ip_list = [''] * n
+
+    if 'IF_LOOPBACK_IP' in cf \
+            and cf['IF_LOOPBACK_IP'] is not None \
+            and len(cf['IF_LOOPBACK_IP']) > 0:
+        ip_list = generate_loopback(cf['IF_LOOPBACK_IP'], n)
+
+    element_format = "<entry name='{0}'/>"
+
+    if len(ip_list) > 0:
+        ip_ver = ip_version(ip_list[0])
+        if ip_ver == 4:  # IPv4
+            element_format = """
+              <entry name='{0}'>
+                <adjust-tcp-mss>
+                  <enable>no</enable>
+                </adjust-tcp-mss>
+                <ip>
+                  <entry name='{1}'/>
+                </ip>
+              </entry>"""
+        elif ip_ver == 6:  # IPv6
+            element_format = """
+              <entry name='{0}'>
+                <ipv6>
+                  <address>
+                    <entry name='{1}'>
+                      <enable-on-interface>yes</enable-on-interface>
+                    </entry>
+                  </address>
+                  <enabled>yes</enabled>
+                </ipv6>
+                <adjust-tcp-mss>
+                  <enable>no</enable>
+                </adjust-tcp-mss>
+              </entry>"""
 
     # static variables in the loop
     #
     s = n // 10  # increment per slice: 10%, 20%, etc..
 
     for if_i in range(n):
-        if ip_octet_j > 255:
-            ip_octet_j = 0
-            ip_octet_i += 1
-
         if_name = "loopback.{0}".format(if_i + cf['IF_LOOPBACK_NAME_i'])
 
-        if 'IF_LOOPBACK_IP' in cf \
-                and cf['IF_LOOPBACK_IP'] is not None \
-                and len(cf['IF_LOOPBACK_IP']) > 0:
-            if_ip = cf['IF_LOOPBACK_IP'].format(ip_octet_i, ip_octet_j)
-            ip_octet_j += 1
-            element = f"""
-              <entry name='{if_name}'>
-                <adjust-tcp-mss>
-                  <enable>no</enable>
-                </adjust-tcp-mss>
-                <ip>
-                  <entry name='{if_ip}'/>
-                </ip>
-              </entry>"""
-        else:
-            element = f"<entry name='{if_name}'/>"
-
+        element = element_format.format(if_name, ip_list[if_i])
         clean_element = f"@name='{if_name}' or "
 
         data['xml'].append(element)
@@ -123,6 +139,7 @@ def pan_net_if_lo():
 
     data['dump'].append("</loopback>")
 
+    # print(json.dumps(data, indent=4))
     write_data(data)
 
     print(cf['_msgs']['ok'] % (timeit.default_timer() - t0), end="")

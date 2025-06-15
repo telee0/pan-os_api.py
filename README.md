@@ -3,7 +3,7 @@
 Scripts rewritten in Python to generate PAN XML config and apply it through REST API
 
 ```
-python3 pan.py -c conf/pa-100.py
+python3 pan.py -c conf/pa.py
 ```
 
 Supported config as follows.

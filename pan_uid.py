@@ -2,7 +2,7 @@
 
 """
 
-pan-os_api v2.2 [20230717]
+pan-os_api v2.3 [20250607]
 
 Scripts to generate PA/Panorama config
 
@@ -12,8 +12,12 @@ Details at https://github.com/telee0/pan-os_api.py.git
 
 """
 
+from pan_data import init_data, write_data, push_data
+from pan_ip import generate_ip
 import timeit
-from pan_data import init_data, write_data
+
+import io
+import requests
 
 verbose, debug = True, False
 
@@ -27,7 +31,7 @@ def pan_uid():
         uid_entries = cf['N_UID_ENTRIES']
 
     if uid_nets <= 0 or uid_entries <= 0:
-        return
+        return None
 
     print("\nUser-ID > IP-user mappings ({0} x {1})".format(uid_nets, uid_entries), end=" ", flush=True)
 
@@ -41,8 +45,6 @@ def pan_uid():
 
     # static parameters: move them back to the loop if they become dynamic
     #
-    ip_octet_j = cf['UID_IP_OCTET_j']
-    ip_octet_k = cf['UID_IP_OCTET_k']
     uid_timeout = cf['UID_TIMEOUT']
 
     # static variables in the loop
@@ -54,34 +56,23 @@ def pan_uid():
 
     for i in range(uid_nets):
         domain = chr(cf['UID_DOMAIN_i'] + i + 64)  # i mapped to A, B, etc.
-        entries = 1
-        for j in range(ip_octet_j, 256):
-            for k in range(ip_octet_k, 256):
-                if entries > uid_entries:
-                    break  # 2
+        ip_list = generate_ip(cf['UID_IP'][i], uid_entries, uid_entries, with_prefix=False)
 
-                uid_user = cf['UID_USER'].format(domain, entries)
-                uid_ip = cf['UID_IP'][i].format(j, k)
+        for j in range(uid_entries):
+            uid_user = cf['UID_USER'].format(domain, j + 1)
+            uid_ip = ip_list[j]
 
-                element = '<entry name="{0}" ip="{1}" timeout="{2}"/>'.format(uid_user, uid_ip, uid_timeout)
+            element = '<entry name="{0}" ip="{1}" timeout="{2}"/>'.format(uid_user, uid_ip, uid_timeout)
+            data['xml'].append(element)
 
-                data['xml'].append(element)
+            time_elapsed = timeit.default_timer() - ti
+            if time_elapsed > 1:
+                print('.', end="", flush=True)
+                ti = timeit.default_timer()
 
-                entries += 1
-
-                time_elapsed = timeit.default_timer() - ti
-
-                if time_elapsed > 1:
-                    print('.', end="", flush=True)
-                    ti = timeit.default_timer()
-
-                if n > cf['LARGE_N'] and count % s == 0:
-                    print("{:.0%}".format(count / n), end="", flush=True)
-
-                count += 1
-            else:
-                continue
-            break
+            if n > cf['LARGE_N'] and count % s == 0:
+                print("{:.0%}".format(count / n), end="", flush=True)
+            count += 1
 
     data['xml'].append("</login></payload></uid-message>")
 
@@ -100,4 +91,4 @@ if __name__ == '__main__':
 else:
     from __main__ import cf
     verbose = cf['VERBOSE']
-    debug = not cf['DEBUG']
+    debug = cf['DEBUG']

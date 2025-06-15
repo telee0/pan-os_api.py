@@ -1,3 +1,3 @@
 #!/bin/bash
 
-python3 pan.py -c conf/pa-86.py -v
+export PAPASS=admin; python3 pan.py -c conf/pa.py -h 192.168.1.1 -u admin -v

@@ -2,7 +2,7 @@
 
 """
 
-pan-os_api v2.2 [20230717]
+pan-os_api v2.3 [20250607]
 
 Scripts to generate PA/Panorama config
 
@@ -25,20 +25,37 @@ verbose, debug = True, False
 
 
 def init():
+    global cf
+    global args
+    global verbose, debug
+
     cf['CF_PATH'] = args.conf
 
     if 'TARGET' not in cf:
         print("init: TARGET not set. Please review config file {}.".format(cf['CF_PATH']))
         exit(1)
 
-    # pass from environment variables
-    #
-    e, p = 'PASSENV', 'PASS'
+    pa1, pa2 = 'PA1', 'PA2'
+    h, u, p, e = 'HOST', 'USER', 'PASS', 'PASSENV'
+    x = (h, u, p)
+    y = (None, 'admin', None)  # default
+    z = {  # specified values
+        pa1: (args.host, args.user, os.getenv(cf[pa1][e])),
+        pa2: (None, args.user, os.getenv(cf[pa2][e])),
+    }
 
-    for pa in ['PA1', 'PA2']:
-        pass_ = os.getenv(cf[pa][e]) if e in cf[pa] else None
-        if pass_ is not None and len(pass_) > 0:
-            cf[pa][p] = pass_
+    for pa in (pa1, pa2):
+        for i, attr in enumerate(x):
+            cf[pa][attr] = z[pa][i] or cf[pa][attr] or y[i]
+            value = cf[pa][attr]
+            if verbose:
+                print(f"\tinit: value = {value}")
+            if not value:
+                print("init: access undefined or empty")
+                print(f"init: check {args.conf} for details ('{pa}/{attr}')")
+                exit(1)
+        if verbose:
+            print()
 
     # parameters defined in code to just save config effort
     #
@@ -71,7 +88,7 @@ def init():
         print("init: {}: unknown TARGET. Please review config file {}.".format(target, cf['CF_PATH']))
         exit(1)
 
-    c, d, f, e, m, s = ('_cmds', '_dirs', '_files', '_ext', '_msgs', '_scripts')
+    c, d, f, e, m, s, p = ('_cmds', '_dirs', '_files', '_ext', '_msgs', '_scripts', '_push')
 
     cf.update({
         c: {  # commands
@@ -96,6 +113,7 @@ def init():
             'ok': 'OK (%.2fs)'
         },
         s: [],
+        p: [],
     })
 
     for name, ext in cf[f][e].items():
@@ -128,26 +146,29 @@ def read_conf(cf_path):
 
 
 def write_job_files():
-    with open('pan.conf', 'a') as f:
+    with open('cf.json', 'a') as f:
         f.write(json.dumps(cf, indent=4))
 
-    with open('config.sh', 'a') as f:
+    with open('pan.sh', 'a') as f:
         for script in cf['_scripts']:
             f.write("sh {}\n".format(script))
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(prog='pan.py', description='Script to generate PA/Panorama config.')
-    parser.add_argument('-c', '--conf', nargs='?', type=str, default="conf/pa.py", help="config file")
-    parser.add_argument('-v', '--verbose', action='store_true', help="verbose mode")
-    parser.add_argument('password', nargs='?')
+    parser = argparse.ArgumentParser(prog='pan.py', description='Script to generate PA/Panorama config.', add_help=False)
+    parser.add_argument('-c', '--conf', nargs='?', type=str, default="conf/pa.py", help="config")
+    parser.add_argument('-h', '--host', type=str, help="host")
+    parser.add_argument('-u', '--user', type=str, help="user")
+    parser.add_argument('-v', '--verbose', action='store_true', help="verbose")
+    # parser.add_argument('password', nargs='?')
+    parser.add_argument('-?', '--help', action='help', help='show this help message and exit')
     parser.print_help()
+    print()
 
     args = parser.parse_args()
 
-    if debug:
-        print()
-        print("args == {0}".format(args))
+    if verbose:
+        print(args, "\n")
 
     read_conf(args.conf)
     from conf import cf
@@ -176,6 +197,7 @@ if __name__ == '__main__':
     import pan_vr_bgp
     import pan_local_users
     import pan_uid
+    from pan_data import push_data
 
     pan_api.go()
     pan_device_groups.go()
@@ -199,6 +221,8 @@ if __name__ == '__main__':
     pan_vr_bgp.go()
     pan_local_users.go()
     pan_uid.go()
+
+    push_data()
 
     if verbose:
         print()

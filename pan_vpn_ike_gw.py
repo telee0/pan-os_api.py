@@ -2,7 +2,7 @@
 
 """
 
-pan-os_api v2.2 [20230717]
+pan-os_api v2.3 [20250607]
 
 Scripts to generate PA/Panorama config
 
@@ -12,8 +12,9 @@ Details at https://github.com/telee0/pan-os_api.py.git
 
 """
 
-import timeit
 from pan_data import init_data, write_data
+from pan_ip import generate_ip
+import timeit
 
 verbose, debug = True, False
 
@@ -83,27 +84,19 @@ def pan_vpn_ike_gw():
     if 'IKE_VERSION' in cf and cf['IKE_VERSION'].startswith('ikev2'):
         ike_version = "<version>{0}</version>".format(cf['IKE_VERSION'])
 
-    local_prefix = cf['IKE_IP_LOCAL_PREFIX']
-    peer_prefix = cf['IKE_IP_PEER_PREFIX']
-
-    ip_octet_i = cf['IKE_IP_OCTET_i']
-    ip_octet_j = cf['IKE_IP_OCTET_j']
+    prefix = cf['IKE_IP_PREFIX']
+    ip_list_local = generate_ip(f"{cf['IKE_IP_LOCAL']}{prefix}", n, 1, with_prefix=False, reset_offset=False)
+    ip_list_peer = generate_ip(f"{cf['IKE_IP_PEER']}{prefix}", n, 1, with_prefix=False, reset_offset=False)
 
     # static variables in the loop
     #
     s = n // 10  # increment per slice: 10%, 20%, etc..
 
     for ike in range(n):
-        if ip_octet_j > 255:
-            ip_octet_j = 0
-            ip_octet_i += 1
-
         ike_name = cf['IKE_NAME'].format(ike + cf['IKE_NAME_i'])
         ike_iface = interfaces[ike]
-        ip_local = cf['IKE_IP_LOCAL'].format(ip_octet_i, ip_octet_j)
-        ip_peer = cf['IKE_IP_PEER'].format(ip_octet_i, ip_octet_j)
-
-        ip_octet_j += 1
+        ip_local = ip_list_local[ike]
+        ip_peer = ip_list_peer[ike]
 
         element_a = f"""
             <entry name='{ike_name}'>
@@ -137,7 +130,7 @@ def pan_vpn_ike_gw():
               </protocol-common>
               <local-address>
                 <interface>{ike_iface}</interface>
-                <ip>{ip_local}{local_prefix}</ip>
+                <ip>{ip_local}{prefix}</ip>
               </local-address>
               <peer-address>
                 <ip>{ip_peer}</ip>
@@ -176,7 +169,7 @@ def pan_vpn_ike_gw():
               </protocol-common>
               <local-address>
                 <interface>{ike_iface}</interface>
-                <ip>{ip_peer}{peer_prefix}</ip>
+                <ip>{ip_peer}{prefix}</ip>
               </local-address>
               <peer-address>
                 <ip>{ip_local}</ip>

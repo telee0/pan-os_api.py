@@ -2,7 +2,7 @@
 
 """
 
-pan-os_api v2.2 [20230717]
+pan-os_api v2.3 [20250607]
 
 Scripts to generate PA/Panorama config
 
@@ -13,7 +13,10 @@ Details at https://github.com/telee0/pan-os_api.py.git
 """
 
 from pan_data import init_data, write_data
+from pan_ip import generate_net
 import timeit
+
+from pan_ip import generate_ip
 
 verbose, debug = True, False
 
@@ -84,32 +87,50 @@ def pan_vpn_ipsec_tun():
     local_net = cf['IPSEC_IP_LOCAL'] + cf['IPSEC_IP_LOCAL_PREFIX']
     remote_net = cf['IPSEC_IP_REMOTE'] + cf['IPSEC_IP_REMOTE_PREFIX']
 
+    if proxy_id_add:
+        n_ = (n + m - 1) // m
+        net_list_local = generate_net(local_net, n_)
+        net_list_remote = generate_net(remote_net, n_)
+        ip_list_local = generate_ip(local_net, n, m, with_prefix=False)
+        ip_list_remote = generate_ip(remote_net, n, m, with_prefix=False)
+    else:
+        net_list_local = generate_net(local_net, n)
+        net_list_remote = generate_net(remote_net, n)
+        ip_list_local = generate_ip(local_net, n, 1, with_prefix=False)
+        ip_list_remote = generate_ip(local_net, n, 1, with_prefix=False)
+
+    if debug:
+        print("net_list_local", net_list_local)
+        print("net_list_remote", net_list_remote)
+        print("ip_list_local", ip_list_local)
+        print("ip_list_remote", ip_list_remote)
+
     # static variables in the loop
     #
     s = n // 10  # increment per slice: 10%, 20%, etc..
 
-    ipsec = 1
+    ipsec = 0
 
-    for i in range(1, n + 1):
-        if ipsec > n:
+    for i in range(n):
+        if ipsec >= n:
             break
 
-        ipsec_name = cf['IPSEC_NAME'].format(i + cf['IPSEC_NAME_i'] - 1)
-        tunnel_interface = cf['IPSEC_TUNNEL_INTERFACE'].format(i + cf['IPSEC_TUNNEL_INTERFACE_i'] - 1)
-        ike_gateway = cf['IPSEC_IKE_GATEWAY'].format(i + cf['IPSEC_IKE_GATEWAY_i'] - 1)
+        ipsec_name = cf['IPSEC_NAME'].format(i + cf['IPSEC_NAME_i'])
+        tunnel_interface = cf['IPSEC_TUNNEL_INTERFACE'].format(i + cf['IPSEC_TUNNEL_INTERFACE_i'])
+        ike_gateway = cf['IPSEC_IKE_GATEWAY'].format(i + cf['IPSEC_IKE_GATEWAY_i'])
 
         proxy_id_a, proxy_id_b = "", ""
 
         if proxy_id_add:
             p_a, p_b = [], []
-            for j in range(1, m + 1):
-                if ipsec > n:
+            for j in range(m):
+                if ipsec >= n:
                     break  # 1
 
-                proxy_id_name = cf['IPSEC_PROXY_ID_NAME'] % (i, j)
+                proxy_id_name = cf['IPSEC_PROXY_ID_NAME'] % (i + 1, j + 1)
 
-                local = cf['IPSEC_IP_LOCAL'].format(i, j)
-                remote = cf['IPSEC_IP_REMOTE'].format(i, j)
+                local = ip_list_local[ipsec]
+                remote = ip_list_remote[ipsec]
 
                 p_a.append(f"""
                   <entry name='{proxy_id_name}'>
@@ -129,7 +150,7 @@ def pan_vpn_ipsec_tun():
                     <remote>{local}</remote>
                   </entry>""")
 
-                ipsec += 1  # 1 proxy_id block counted as 1 ipsec
+                ipsec += 1  # 1x proxy_id counted as 1x ipsec
 
                 time_elapsed = timeit.default_timer() - ti
 
@@ -181,10 +202,10 @@ def pan_vpn_ipsec_tun():
 
         # routes
         #
-        route_name = f"Tunnel_Route-{i + cf['IPSEC_ROUTE_i'] - 1}"
+        route_name = cf['IPSEC_ROUTE_NAME'].format(i + cf['IPSEC_ROUTE_i'])
 
-        dst_a = remote_net.format(i, 0)
-        dst_b = local_net.format(i, 0)
+        dst_a = net_list_local[i]
+        dst_b = net_list_remote[i]
 
         route_a = f"""
                   <entry name='{route_name}'>

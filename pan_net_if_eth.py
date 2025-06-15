@@ -2,7 +2,7 @@
 
 """
 
-pan-os_api v2.2 [20230717]
+pan-os_api v2.3 [20250607]
 
 Scripts to generate PA/Panorama config
 
@@ -13,8 +13,9 @@ Details at https://github.com/telee0/pan-os_api.py.git
 """
 
 from pan_data import init_data, write_data
+from pan_ip import generate_ip, ip_version
 import timeit
-
+import json
 verbose, debug = True, False
 
 
@@ -61,39 +62,25 @@ def pan_net_if_eth():
         data['xml'+a][0] = data['xml'+a][0] % xpath
         data['clean_xml'+a][0] = data['clean_xml'+a][0] % xpath
 
-    ip_octet_i = cf['IF_ETHERNET_IP_OCTET_i']
-    ip_octet_j = cf['IF_ETHERNET_IP_OCTET_j']
-
     # static variables in the loop
     #
     nm = n * m
     s = nm // 10  # increment per slice: 10%, 20%, etc..
 
-    count = 1
+    ip_list = [''] * nm
 
-    for eth_i in range(m):
-        eth_name = cf['IF_ETHERNET_LIST'][eth_i]  # e.g. eth_name = "ethernet1/13"
+    if 'IF_ETHERNET_IP' in cf \
+            and cf['IF_ETHERNET_IP'] is not None \
+            and len(cf['IF_ETHERNET_IP']) > 0:
+        ip_list = generate_ip(cf['IF_ETHERNET_IP'], nm, 1)
 
-        xpath = "{0}/config/devices/entry[@name='{1}']" \
-            "/network/interface/ethernet/entry[@name='{2}']/layer3/units".format(x, lhost, eth_name)
-        xml = f"xml_{eth_i + 1}"
-        clean_xml = f"clean_{xml}"
-        data[xml][0] = data[xml][0] % xpath
-        data[clean_xml][0] = data[clean_xml][0] % xpath
+    element_format = "<entry name='{0}'/>"
 
-        for eth_j in range(1, n + 1):
-            if ip_octet_j > 255:
-                ip_octet_j = 0  # normalize j for next i
-                ip_octet_i += 1
-
-            if_name = "{0}.{1}".format(eth_name, eth_j)
-            if_ip = cf['IF_ETHERNET_IP'].format(ip_octet_i, ip_octet_j)
-            if_tag = eth_j + cf['IF_ETHERNET_TAG_i'] - 1
-
-            ip_octet_j += 1
-
-            element = f"""
-                  <entry name='{if_name}'>
+    if len(ip_list) > 0:
+        ip_ver = ip_version(ip_list[0])
+        if ip_ver == 4:  # IPv4
+            element_format = """
+                  <entry name='{0}'>
                     <ipv6>
                       <neighbor-discovery>
                         <router-advertisement>
@@ -108,11 +95,66 @@ def pan_net_if_eth():
                       <enable>no</enable>
                     </adjust-tcp-mss>
                     <ip>
-                      <entry name='{if_ip}'/>
+                      <entry name='{1}'/>
                     </ip>
-                    <tag>{if_tag}</tag>
-                  </entry>"""  # .format(if_name, if_ip, if_tag)
+                    <tag>{2}</tag>
+                  </entry>"""
+        elif ip_ver == 6:  # IPv6
+            element_format = """
+                  <entry name="{0}">
+                    <ipv6>
+                      <neighbor-discovery>
+                        <router-advertisement>
+                          <enable>no</enable>
+                        </router-advertisement>
+                      </neighbor-discovery>
+                      <address>
+                        <entry name="{1}">
+                          <advertise>
+                            <enable>no</enable>
+                            <valid-lifetime>2592000</valid-lifetime>
+                            <preferred-lifetime>604800</preferred-lifetime>
+                            <onlink-flag>yes</onlink-flag>
+                            <auto-config-flag>yes</auto-config-flag>
+                          </advertise>
+                          <enable-on-interface>yes</enable-on-interface>
+                        </entry>
+                      </address>
+                      <enabled>yes</enabled>
+                    </ipv6>
+                    <ndp-proxy>
+                      <enabled>no</enabled>
+                    </ndp-proxy>
+                    <adjust-tcp-mss>
+                      <enable>no</enable>
+                    </adjust-tcp-mss>
+                    <tag>{2}</tag>
+                  </entry>"""
 
+    count = 1
+
+    for eth_i in range(m):
+        eth_name = cf['IF_ETHERNET_LIST'][eth_i]  # e.g. eth_name = "ethernet1/13"
+
+        xpath = "{0}/config/devices/entry[@name='{1}']" \
+            "/network/interface/ethernet/entry[@name='{2}']/layer3/units".format(x, lhost, eth_name)
+        # "/network/interface/ethernet/entry[@name='{2}']".format(x, lhost, eth_name)
+        
+        xml = f"xml_{eth_i + 1}"
+        clean_xml = f"clean_{xml}"
+        data[xml][0] = data[xml][0] % xpath
+        data[clean_xml][0] = data[clean_xml][0] % xpath
+
+        # data[xml].append("<layer3><units>")
+
+        for eth_j in range(n):
+            eth_k = eth_i * n + eth_j
+
+            if_name = "{0}.{1}".format(eth_name, eth_j + 1)
+            if_ip = ip_list[eth_k]
+            if_tag = eth_k + cf['IF_ETHERNET_TAG_i']
+
+            element = element_format.format(if_name, if_ip, if_tag)
             clean_element = "@name='{0}' or ".format(if_name)
 
             data[xml].append(element)
@@ -136,6 +178,7 @@ def pan_net_if_eth():
 
             count += 1
 
+        # data[xml].append("</units></layer3>")
         data[clean_xml].append("@name='_z']")
 
     for asso in associations:
@@ -143,6 +186,7 @@ def pan_net_if_eth():
 
     data['dump'].append("</ethernet>")
 
+    # print(json.dumps(data, indent=4))
     write_data(data)
 
     print(cf['_msgs']['ok'] % (timeit.default_timer() - t0), end="")

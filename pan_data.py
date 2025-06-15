@@ -2,7 +2,7 @@
 
 """
 
-pan-os_api v2.2 [20230717]
+pan-os_api v2.3 [20250607]
 
 Scripts to generate PA/Panorama config
 
@@ -15,18 +15,24 @@ Details at https://github.com/telee0/pan-os_api.py.git
 import json
 from os import makedirs
 
+import requests
+import timeit
+
 verbose, debug = True, False
 
 
 def init_data(pre, associations=(), target='PA1', seq=0):
+    global cf
+    
     if target not in cf:
         print("init_data: {}: target not found. Please review config file {}.".format(target, cf['CF_PATH']))
         exit(1)
 
-    d, f, e = ('_dirs', '_files', '_ext')
+    d, f, e, p = ('_dirs', '_files', '_ext', '_push')
 
     data = {
-        f: {}
+        f: {},
+        p: {},
     }
 
     c = 'clean_'
@@ -75,15 +81,34 @@ def init_data(pre, associations=(), target='PA1', seq=0):
         api_set = "type=user-id&key={0}&cmd="
     else:
         api_set = "type=config&action=set&key={0}&{1}&element="
-    api_del = "type=config&action=delete&key={0}&{1}/entry["
+    api_del_entry = "type=config&action=delete&key={0}&{1}/entry["
+    api_del_member = "type=config&action=delete&key={0}&{1}/member["
     api_key = cf[target]['KEY']
+
+    data[p] = {  # data structure for config push
+        'target': target,
+        'url': url,
+        'cfg_list': [],
+        'pth_list': {},
+    }
 
     for asso in ("",) + associations:
         a = "" if asso == "" else "_" + asso
         data['script'+a].append(cmd.format(wget, data[f]['xml'+a], data[f]['out'+a], data[f]['log'+a], url))
         data['xml'+a].append(api_set.format(api_key, "%s"))  # %s for xpath
         data[c+'script'+a].append(cmd.format(wget, data[f][c+'xml'+a], data[f][c+'out'+a], data[f][c+'log'+a], url))
-        data[c+'xml'+a].append(api_del.format(api_key, "%s"))  # %s for xpath
+        if asso in ('vsys', 'zone', 'vr'):
+            data[c+'xml'+a].append(api_del_member.format(api_key, "%s"))  # %s for xpath
+        else:
+            data[c + 'xml' + a].append(api_del_entry.format(api_key, "%s"))  # %s for xpath
+        #
+        name = pre + a
+        data[p]['cfg_list'].append(name)
+        data[p]['pth_list'][name] = {
+            'xml': data[f]['xml'+a],
+            'out': data[f]['out'+a],
+            'log': data[f]['log'+a]
+        }
 
     for name in ('dump',):
         data[f][name] = 'data.' + name
@@ -96,6 +121,8 @@ def init_data(pre, associations=(), target='PA1', seq=0):
 
 
 def write_data(data, target='PA1'):
+    global verbose
+
     if target not in cf:
         print("write_data: {}: target not found. Please review config file {}.".format(target, cf['CF_PATH']))
         exit(1)
@@ -112,11 +139,18 @@ def write_data(data, target='PA1'):
 
     if verbose:
         print(json.dumps(data, indent=4))
-        pass
 
     files, script, scripts = '_files', 'script', '_scripts'
 
+    keys_fwd, keys_bwd = [], []
     for k in data[files].keys():
+        if k.startswith('clean_script'):
+            keys_bwd.append(k)
+        else:
+            keys_fwd.append(k)
+    keys_ordered = keys_fwd + keys_bwd[::-1]  # clean scripts have commands in reversed order
+
+    for k in keys_ordered:
         if len(data[k]) > 0:  # file content has positive line count
             file = target_dir + data[files][k]
             with open(file, 'a') as f:
@@ -131,8 +165,9 @@ def write_data(data, target='PA1'):
             cf[scripts].append(path)
 
     if verbose:
-        # print(json.dumps(data, indent=4))
-        pass
+        print(json.dumps(data, indent=4))
+
+    cf['_push'].append(data['_push'])
 
 
 def gen_xpath(shared, local_path, dg=None):
@@ -156,6 +191,58 @@ def gen_xpath(shared, local_path, dg=None):
         xpath = "{0}/{1}".format(cf['XPATH'], local_path_1)
 
     return xpath
+
+
+def push_data():
+    global verbose
+
+    t0 = timeit.default_timer()
+    ti = t0
+
+    print()
+
+    for p in cf['_push']:
+        url = p['url']
+        target = p['target']
+        prefix = "PA2/" if target == "PA2" else ""
+        for cfg in p['cfg_list']:
+            print(f"\nPushing {cfg} to {target}..", end=" ", flush=True)
+            paths = p['pth_list'][cfg]
+            xml_path = prefix + paths['xml']  # xml/uid.xml
+            out_path = prefix + paths['out']  # logs/uid.out.xml
+            log_path = prefix + paths['log']  # logs/uid.log
+            try:
+                with open(xml_path, 'r', encoding="utf-8") as f:
+                    lines = f.readlines()
+                params_line = lines[0].strip()
+
+                from urllib.parse import parse_qsl
+                params = dict(parse_qsl(params_line))
+
+                xml_data = ''.join(lines[1:]).strip()
+
+                data_key = "element" if cfg != "uid" else "cmd"
+                post_data = {**params, data_key: xml_data}
+
+                if verbose:
+                    print(json.dumps(post_data, indent=4))
+
+                response = requests.post(
+                    url,
+                    data=post_data,
+                    verify=False,  # equivalent to --no-check-certificate
+                    timeout=5,
+                )
+                with open(out_path, 'ab') as f:
+                    f.write(response.content + b"\n")
+                with open(log_path, 'a') as log_file:
+                    log_file.write(f"{response.status_code} {response.reason}\n")
+            except requests.RequestException as e:
+                with open(log_path, 'a') as log_file:
+                    log_file.write(f"Request failed: {e}\n")
+
+        print(cf['_msgs']['ok'] % (timeit.default_timer() - ti), end="")
+        ti = timeit.default_timer()
 
 
 def go():
