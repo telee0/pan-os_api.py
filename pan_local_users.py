@@ -83,8 +83,8 @@ def pan_local_users():
 
     phash = pan_local_users_phash(cf['PA1'], cf['USER_PASS'])
 
-    for i in range(1, n + 1):
-        user_name = cf['USER_NAME'] % i
+    for i in range(n):
+        user_name = cf['USER_NAME'].format(cf['USER_NAME_i'] + i)
 
         element = "<entry name='{0}'><phash>{1}</phash></entry>".format(user_name, phash)
         clean_element = "@name='{0}' or ".format(user_name)
@@ -99,7 +99,7 @@ def pan_local_users():
             print('.', end="", flush=True)
             ti = timeit.default_timer()
 
-        if n > cf['LARGE_N'] and i % s == 0:
+        if n > cf['LARGE_N'] and (i + 1) % s == 0:
             print("{:.0%}".format(i / n), end="", flush=True)
 
     data['clean_xml'].append("@name='_z']")

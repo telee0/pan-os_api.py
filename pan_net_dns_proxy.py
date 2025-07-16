@@ -79,18 +79,24 @@ def pan_net_dns_proxy():
               <enabled>no</enabled>
             </tcp-queries>"""
 
-    entry['interface'] = ""  # empty now
-
-    """
-            <interface>
-              <member>ethernet1/2</member>
-              <member>ethernet1/3</member>
-            </interface>"""
+    # flatten the interface list, and check if number of interfaces < N_NET_DNS_PROXY (which is okay)
+    #
+    interfaces = []
+    if 'DNS_PROXY_INTERFACE_LIST' in cf and len(cf['DNS_PROXY_INTERFACE_LIST']) > 0:
+        for if_name, if_i, if_n in cf['DNS_PROXY_INTERFACE_LIST']:
+            for if_j in range(if_i, if_n + 1):
+                interfaces.append("<interface><member>" + if_name.format(if_j) + "</member></interface>")
+        n_if = len(interfaces)
+        if n_if < n:
+            print(f"DNS_PROXY_INTERFACE_LIST: interfaces available for only first {n_if}/{n} assignments.. ", end="")
+            interfaces.extend([""] * (n - n_if))
+    else:
+        interfaces = [""] * n
 
     static_entries = []
 
-    for i in range(1, cf['DNS_PROXY_STATIC_ENTRIES'] + 1):
-        fqdn = cf['DNS_PROXY_STATIC_FQDN'] % i
+    for i in range(cf['DNS_PROXY_STATIC_ENTRIES']):
+        fqdn = cf['DNS_PROXY_STATIC_FQDN'].format(i + 1)  # 1-based naming
         address = cf['DNS_PROXY_STATIC_ADDR']  # currently a constant value
         static_entries.append(
             f"""
@@ -112,11 +118,13 @@ def pan_net_dns_proxy():
     #
     s = n // 10  # increment per slice: 10%, 20%, etc..
 
-    for i in range(1, n + 1):
-        dns_proxy_name = cf['DNS_PROXY_NAME'] % i
+    for i in range(n):
+        dns_proxy_name = cf['DNS_PROXY_NAME'].format(cf['DNS_PROXY_NAME_i'] + i)
 
         element = f"""
-          <entry name=\"{dns_proxy_name}\">{entry_details}
+          <entry name="{dns_proxy_name}">
+            {entry_details}
+            {interfaces[i]}
           </entry>"""
 
         clean_element = "@name='{0}' or ".format(dns_proxy_name)
@@ -131,7 +139,7 @@ def pan_net_dns_proxy():
             print('.', end="", flush=True)
             ti = timeit.default_timer()
 
-        if n > cf['LARGE_N'] and i % s == 0:
+        if n > cf['LARGE_N'] and (i + 1) % s == 0:
             print("{:.0%}".format(i / n), end="", flush=True)
 
     data['clean_xml'].append("@name='_z']")

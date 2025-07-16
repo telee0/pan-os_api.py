@@ -14,6 +14,7 @@ Details at https://github.com/telee0/pan-os_api.py.git
 
 from pan_data import init_data, write_data
 from pan_data import gen_xpath
+from pan_ip import generate_net
 import timeit
 
 verbose, debug = True, False
@@ -51,10 +52,27 @@ def pan_rules_pbf(dg=None, seq=0):
     data['xml'][0] = data['xml'][0] % xpath
     data['clean_xml'][0] = data['clean_xml'][0] % xpath
 
+    net_list_src = generate_net(cf['PBF_SOURCE'], n, with_prefix=True)
+    net_list_dst = [''] * n
+
     # static parameters: move them back to the loop if they are dynamic
     #
     src_zone = cf['PBF_SRC_ZONE']
     service = cf['PBF_SERVICE']
+
+    action = cf['PBF_ACTION']
+    action_format = "<no-pbf/>"
+    if action == "forward":
+        action_format = """
+                    <forward>
+                      <nexthop>
+                        <ip-address>{0}</ip-address>
+                      </nexthop>
+                      <egress-interface>{1}</egress-interface>
+                    </forward>"""
+        net_list_dst = generate_net(cf['PBF_DESTINATION'], n, with_prefix=True)
+    elif action == "discard":
+        action_format = "<discard/>"
     egress = cf['PBF_EGRESS_INTERFACE']
     next_hop = cf['PBF_NEXTHOP']
 
@@ -62,70 +80,53 @@ def pan_rules_pbf(dg=None, seq=0):
     #
     s = n // 10  # increment per slice: 10%, 20%, etc..
 
-    rules = 1
+    for i in range(n):
+        rule_name = (cf['PBF_NAME'] + suf).format(i + cf['PBF_NAME_i'])
+        src, dst = net_list_src[i], net_list_dst[i]
+        action = action_format.format(next_hop, egress)
 
-    for i in range(256):
-        for j in range(256):
-            if rules > n:
-                break  # 2
+        element = f"""
+            <entry name='{rule_name}'>
+              <action>{action}</action>
+              <from>
+                <zone>
+                  <member>{src_zone}</member>
+                </zone>
+              </from>
+              <enforce-symmetric-return>
+                <enabled>no</enabled>
+              </enforce-symmetric-return>
+              <source>
+                <member>{src}</member>
+              </source>
+              <destination>
+                <member>{dst}</member>
+              </destination>
+              <source-user>
+                <member>any</member>
+              </source-user>
+              <application>
+                <member>any</member>
+              </application>
+              <service>
+                <member>{service}</member>
+              </service>
+            </entry>"""
 
-            rule_name = (cf['PBF_NAME'] + suf) % rules
-            src = cf['PBF_SOURCE'] % (i, j)
+        clean_element = f"@name='{rule_name}' or "
 
-            element = f"""
-                <entry name='{rule_name}'>
-                  <action>
-                    <forward>
-                      <nexthop>
-                        <ip-address>{next_hop}</ip-address>
-                      </nexthop>
-                      <egress-interface>{egress}</egress-interface>
-                    </forward>
-                  </action>
-                  <from>
-                    <zone>
-                      <member>{src_zone}</member>
-                    </zone>
-                  </from>
-                  <enforce-symmetric-return>
-                    <enabled>no</enabled>
-                  </enforce-symmetric-return>
-                  <source>
-                    <member>{src}</member>
-                  </source>
-                  <destination>
-                    <member>any</member>
-                  </destination>
-                  <source-user>
-                    <member>any</member>
-                  </source-user>
-                  <application>
-                    <member>any</member>
-                  </application>
-                  <service>
-                    <member>{service}</member>
-                  </service>
-                </entry>"""  # .format(rule_name, next_hop, egress, src_zone, src, service)
+        data['xml'].append(element)
+        data['clean_xml'].append(clean_element)
+        data['dump'].append(element)
 
-            clean_element = f"@name='{rule_name}' or "
+        time_elapsed = timeit.default_timer() - ti
 
-            data['xml'].append(element)
-            data['clean_xml'].append(clean_element)
-            data['dump'].append(element)
+        if time_elapsed > 1:
+            print('.', end="", flush=True)
+            ti = timeit.default_timer()
 
-            time_elapsed = timeit.default_timer() - ti
-
-            if time_elapsed > 1:
-                print('.', end="", flush=True)
-                ti = timeit.default_timer()
-
-            if n > cf['LARGE_N'] and rules % s == 0:
-                print("{:.0%}".format(rules / n), end="", flush=True)
-
-            rules += 1
-        else:
-            continue
-        break
+        if n > cf['LARGE_N'] and (i + 1) % s == 0:
+            print("{:.0%}".format(i / n), end="", flush=True)
 
     data['clean_xml'].append("@name='_z']")
     data['dump'].append("</rules></pbf>")

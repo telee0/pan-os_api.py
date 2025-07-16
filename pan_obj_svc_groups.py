@@ -50,9 +50,19 @@ def pan_obj_svc_groups(dg=None, seq=0):
 
     # static parameters: move them back to the loop when they become dynamic
     #
-    service_group_protocol = cf['SERVICE_PROTOCOL']
-    if 'SERVICE_GROUP_PROTOCOL' and cf['SERVICE_GROUP_PROTOCOL'] in ('both', 'tcp', 'udp'):
+    service_group_protocol = ""
+    if 'SERVICE_GROUP_PROTOCOL' in cf and cf['SERVICE_GROUP_PROTOCOL'] in ('both', 'tcp', 'udp'):
         service_group_protocol = cf['SERVICE_GROUP_PROTOCOL']
+    elif 'SERVICE_PROTOCOL' in cf and cf['SERVICE_PROTOCOL'] in ('both', 'tcp', 'udp'):
+        service_group_protocol = cf['SERVICE_PROTOCOL']
+
+    protocol_list = []
+    if service_group_protocol == 'both':
+        protocol_list = ['tcp', 'udp']
+    elif service_group_protocol == 'tcp':
+        protocol_list = ['tcp']
+    elif service_group_protocol == 'udp':
+        protocol_list = ['udp']
 
     # static variables in the loop
     #
@@ -60,25 +70,16 @@ def pan_obj_svc_groups(dg=None, seq=0):
     suf = f"-{seq}" if seq > 0 else ''
     m = cf['SERVICE_GROUP_MEMBER_COUNT']
 
-    services = 1
-
-    for i in range(1, n + 1):
-
-        group_name = (cf['SERVICE_GROUP_NAME'] + suf) % i
+    for i in range(n):
+        group_name = (cf['SERVICE_GROUP_NAME'] + suf).format(i + cf['SERVICE_GROUP_NAME_i'])
         members = []
 
-        for _ in range(m):
-            service_port = cf['SERVICE_PORT_DST'] + services - 1
-
-            if service_group_protocol in ('both', 'tcp'):
-                service_name = (cf['SERVICE_NAME'] + suf) % ("tcp", service_port)
+        for j in range(m):
+            services = (i * m + j) % cf['N_OBJ_SERVICE']
+            service_port = cf['SERVICE_PORT_DST'] + services
+            for protocol in protocol_list:
+                service_name = (cf['SERVICE_NAME'] + suf).format(protocol, service_port)
                 members.append("<member>{0}</member>".format(service_name))
-
-            if service_group_protocol in ('both', 'udp'):
-                service_name = (cf['SERVICE_NAME'] + suf) % ("udp", service_port)
-                members.append("<member>{0}</member>".format(service_name))
-
-            services = services % cf['N_OBJ_SERVICE'] + 1  # recycle the service objects
 
         element = "<entry name='{0}'><members>{1}</members></entry>".format(group_name, "\n".join(members))
         clean_element = "@name='{0}' or ".format(group_name)
@@ -93,7 +94,7 @@ def pan_obj_svc_groups(dg=None, seq=0):
             print('.', end="", flush=True)
             ti = timeit.default_timer()
 
-        if n > cf['LARGE_N'] and i % s == 0:
+        if n > cf['LARGE_N'] and (i + 1) % s == 0:
             print("{:.0%}".format(i / n), end="", flush=True)
 
     data['clean_xml'].append("@name='_z']")

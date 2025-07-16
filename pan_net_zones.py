@@ -51,16 +51,19 @@ def pan_net_zones():
 
     # static parameters: move them back to the loop if they become dynamic
     #
+    zone_type = ""
+    if 'ZONE_TYPE' in cf and cf['ZONE_TYPE'] in ("tap", "virtual-wire", "layer2", "layer3", "tunnel"):
+        zone_type = f"<network><{cf['ZONE_TYPE']}/></network>"
     zone_uid = "<enable-user-identification>yes</enable-user-identification>" if cf['ZONE_UID'] else ""
 
     # static variables in the loop
     #
     s = n // 10  # increment per slice: 10%, 20%, etc..
 
-    for i in range(1, n + 1):
-        zone_name = cf['ZONE_NAME'] % i
+    for i in range(n):
+        zone_name = cf['ZONE_NAME'].format(i + cf['ZONE_NAME_i'])
 
-        element = "<entry name='{0}'>{1}</entry>".format(zone_name, zone_uid)
+        element = "<entry name='{0}'>{1}{2}</entry>".format(zone_name, zone_uid, zone_type)
         clean_element = "@name='{0}' or ".format(zone_name)
 
         data['xml'].append(element)
@@ -73,7 +76,7 @@ def pan_net_zones():
             print('.', end="", flush=True)
             ti = timeit.default_timer()
 
-        if n > cf['LARGE_N'] and i % s == 0:
+        if n > cf['LARGE_N'] and (i + 1) % s == 0:
             print("{:.0%}".format(i / n), end="", flush=True)
 
     data['clean_xml'].append("@name='_z']")

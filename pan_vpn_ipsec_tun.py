@@ -13,7 +13,7 @@ Details at https://github.com/telee0/pan-os_api.py.git
 """
 
 from pan_data import init_data, write_data
-from pan_ip import generate_net
+from pan_ip import generate_net, ip_version
 import timeit
 
 from pan_ip import generate_ip
@@ -99,6 +99,13 @@ def pan_vpn_ipsec_tun():
         ip_list_local = generate_ip(local_net, n, 1, with_prefix=False)
         ip_list_remote = generate_ip(local_net, n, 1, with_prefix=False)
 
+    ipv6 = ""
+    proxy_id_format = "<proxy-id>{0}</proxy-id>"
+    ip_ver = ip_version(ip_list_local[0])
+    if ip_ver == 6:
+        ipv6 = "<ipv6>yes</ipv6>"
+        proxy_id_format = "<proxy-id-v6>{0}</proxy-id-v6>"
+
     if debug:
         print("net_list_local", net_list_local)
         print("net_list_remote", net_list_remote)
@@ -127,7 +134,7 @@ def pan_vpn_ipsec_tun():
                 if ipsec >= n:
                     break  # 1
 
-                proxy_id_name = cf['IPSEC_PROXY_ID_NAME'] % (i + 1, j + 1)
+                proxy_id_name = cf['IPSEC_PROXY_ID_NAME'].format(i + 1, j + 1)
 
                 local = ip_list_local[ipsec]
                 remote = ip_list_remote[ipsec]
@@ -158,8 +165,10 @@ def pan_vpn_ipsec_tun():
                     print('.', end="", flush=True)
                     ti = timeit.default_timer()
 
-            proxy_id_a = "<proxy-id>{0}</proxy-id>".format("\n".join(p_a))
-            proxy_id_b = "<proxy-id>{0}</proxy-id>".format("\n".join(p_b))
+            # proxy_id_a = "<proxy-id>{0}</proxy-id>".format("\n".join(p_a))
+            # proxy_id_b = "<proxy-id>{0}</proxy-id>".format("\n".join(p_b))
+            proxy_id_a = proxy_id_format.format("\n".join(p_a))
+            proxy_id_b = proxy_id_format.format("\n".join(p_b))
 
         element_a = f"""
             <entry name='{ipsec_name}'>
@@ -175,6 +184,7 @@ def pan_vpn_ipsec_tun():
               </tunnel-monitor>
               <tunnel-interface>{tunnel_interface}</tunnel-interface>
               <anti-replay>{anti_replay}</anti-replay>
+              {ipv6}
             </entry>"""
 
         element_b = f"""
@@ -191,6 +201,7 @@ def pan_vpn_ipsec_tun():
               </tunnel-monitor>
               <tunnel-interface>{tunnel_interface}</tunnel-interface>
               <anti-replay>{anti_replay}</anti-replay>
+              {ipv6}
             </entry>"""
 
         clean_element = f"@name='{ipsec_name}' or "

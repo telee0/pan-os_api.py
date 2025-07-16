@@ -13,7 +13,7 @@ Details at https://github.com/telee0/pan-os_api.py.git
 """
 
 from pan_data import init_data, write_data
-from time import sleep
+from pan_ip import generate_net, ip_version
 import timeit
 
 verbose, debug = True, False
@@ -46,8 +46,15 @@ def pan_vr_static():
     lhost = cf['LHOST']
     # vr = cf['VR_STATIC_VR']
 
+    ip_ver, ip_family = 4, "ip"
+    net_list = generate_net(cf['VR_STATIC_DESTINATION'], n, with_prefix=True)
+    if len(net_list) > 0:
+        ip_ver = ip_version(net_list[0])
+        if ip_ver == 6:
+            ip_family = "ipv6"
+
     xpath = "{0}/config/devices/entry[@name='{1}']" \
-        "/network/virtual-router/entry[@name='{2}']/routing-table/ip/static-route".format(x, lhost, vr)
+        "/network/virtual-router/entry[@name='{2}']/routing-table/{3}/static-route".format(x, lhost, vr, ip_family)
 
     data['xml'][0] = data['xml'][0] % xpath
     data['clean_xml'][0] = data['clean_xml'][0] % xpath
@@ -56,7 +63,11 @@ def pan_vr_static():
     #
     next_hop = ""
     if 'VR_STATIC_NEXTHOP' in cf and len(cf['VR_STATIC_NEXTHOP']) > 0:
-        next_hop = cf['VR_STATIC_NEXTHOP']
+        next_hop_ip = cf['VR_STATIC_NEXTHOP']
+        if ip_ver == 4:  # IPv4
+            next_hop = f"<nexthop><ip-address>{next_hop_ip}</ip-address></nexthop>"
+        elif ip_ver == 6:  # IPv6
+            next_hop = f"<nexthop><ipv6-address>{next_hop_ip}</ipv6-address></nexthop>"
 
     interface = ""
     if 'VR_STATIC_INTERFACE' in cf and len(cf['VR_STATIC_INTERFACE']) > 0:
@@ -66,57 +77,43 @@ def pan_vr_static():
     #
     s = n // 10  # increment per slice: 10%, 20%, etc..
 
-    routes = 1
+    for i in range(n):
+        route_name = cf['VR_STATIC_NAME'].format(i + cf['VR_STATIC_NAME_i'])
+        destination = net_list[i]
 
-    for i in range(256):
-        for j in range(256):
-            if routes > n:
-                break  # 2
+        element = f"""
+              <entry name='{route_name}'>
+                <path-monitor>
+                  <enable>no</enable>
+                  <failure-condition>any</failure-condition>
+                  <hold-time>2</hold-time>
+                </path-monitor>
+                {next_hop}
+                <bfd>
+                  <profile>None</profile>
+                </bfd>
+                {interface}
+                <metric>10</metric>
+                <destination>{destination}</destination>
+                <route-table>
+                  <unicast/>
+                </route-table>
+              </entry>"""
 
-            route_name = cf['VR_STATIC_NAME'] % routes
-            # next_hop = cf['VR_STATIC_NEXTHOP']
-            destination = cf['VR_STATIC_DESTINATION'] % (i, j)
+        clean_element = "@name='{0}' or ".format(route_name)
 
-            element = f"""
-                  <entry name='{route_name}'>
-                    <path-monitor>
-                      <enable>no</enable>
-                      <failure-condition>any</failure-condition>
-                      <hold-time>2</hold-time>
-                    </path-monitor>
-                    <nexthop>
-                      <ip-address>{next_hop}</ip-address>
-                    </nexthop>
-                    <bfd>
-                      <profile>None</profile>
-                    </bfd>
-                    {interface}
-                    <metric>10</metric>
-                    <destination>{destination}</destination>
-                    <route-table>
-                      <unicast/>
-                    </route-table>
-                  </entry>"""  # .format(route_name, next_hop, interface, destination)
+        data['xml'].append(element)
+        data['clean_xml'].append(clean_element)
+        data['dump'].append(element)
 
-            clean_element = "@name='{0}' or ".format(route_name)
+        time_elapsed = timeit.default_timer() - ti
 
-            data['xml'].append(element)
-            data['clean_xml'].append(clean_element)
-            data['dump'].append(element)
+        if time_elapsed > 1:
+            print('.', end="", flush=True)
+            ti = timeit.default_timer()
 
-            time_elapsed = timeit.default_timer() - ti
-
-            if time_elapsed > 1:
-                print('.', end="", flush=True)
-                ti = timeit.default_timer()
-
-            if n > cf['LARGE_N'] and routes % s == 0:
-                print("{:.0%}".format(routes / n), end="", flush=True)
-
-            routes += 1
-        else:
-            continue
-        break
+        if n > cf['LARGE_N'] and (i + 1) % s == 0:
+            print("{:.0%}".format(i / n), end="", flush=True)
 
     data['clean_xml'].append("@name='_z']")
     data['dump'].append("</static-route></ip></routing-table>")

@@ -68,7 +68,7 @@ def pan_obj_addr(dg=None, seq=0):
     addresses = 1
 
     for i in range(n):
-        addr_name = (cf['ADDR_NAME'] + suf) % addresses
+        addr_name = (cf['ADDR_NAME'] + suf).format(addresses)
         address = address_list[i]
 
         element = "<entry name='{0}'><{1}>{2}</{1}></entry>".format(addr_name, addr_type, address)

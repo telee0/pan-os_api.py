@@ -13,7 +13,7 @@ Details at https://github.com/telee0/pan-os_api.py.git
 """
 
 from pan_data import init_data, write_data
-from pan_ip import generate_ip
+from pan_ip import generate_ip, ip_version
 import timeit
 
 verbose, debug = True, False
@@ -88,9 +88,58 @@ def pan_vpn_ike_gw():
     ip_list_local = generate_ip(f"{cf['IKE_IP_LOCAL']}{prefix}", n, 1, with_prefix=False, reset_offset=False)
     ip_list_peer = generate_ip(f"{cf['IKE_IP_PEER']}{prefix}", n, 1, with_prefix=False, reset_offset=False)
 
+    ipv6 = ""
+    ip_ver = ip_version(ip_list_local[0])
+    if ip_ver == 6:
+        ipv6 = "<ipv6>yes</ipv6>"
+
+    x = [f"{{{i}}}" for i in range(4)]  # placeholders for delayed substitutions
+
+    element_format = f"""
+        <entry name='{x[0]}'>
+          <authentication>
+            <pre-shared-key>
+              <key>{ike_key}</key>
+            </pre-shared-key>
+          </authentication>
+          <protocol>
+            <ikev1>
+              <dpd>
+                <enable>yes</enable>
+              </dpd>
+              {ike_crypto_pfile}
+            </ikev1>
+            <ikev2>
+              <dpd>
+                <enable>yes</enable>
+              </dpd>
+              {ike_crypto_pfile}
+            </ikev2>
+            {ike_version}
+          </protocol>
+          <protocol-common>
+            <nat-traversal>
+              <enable>no</enable>
+            </nat-traversal>
+            <fragmentation>
+              <enable>no</enable>
+            </fragmentation>
+          </protocol-common>
+          <local-address>
+            <interface>{x[1]}</interface>
+            <ip>{x[2]}{prefix}</ip>
+          </local-address>
+          <peer-address>
+            <ip>{x[3]}</ip>
+          </peer-address>
+          {ipv6}
+        </entry>"""
+
     # static variables in the loop
     #
     s = n // 10  # increment per slice: 10%, 20%, etc..
+
+    count = 1
 
     for ike in range(n):
         ike_name = cf['IKE_NAME'].format(ike + cf['IKE_NAME_i'])
@@ -98,83 +147,8 @@ def pan_vpn_ike_gw():
         ip_local = ip_list_local[ike]
         ip_peer = ip_list_peer[ike]
 
-        element_a = f"""
-            <entry name='{ike_name}'>
-              <authentication>
-                <pre-shared-key>
-                  <key>{ike_key}</key>
-                </pre-shared-key>
-              </authentication>
-              <protocol>
-                <ikev1>
-                  <dpd>
-                    <enable>yes</enable>
-                  </dpd>
-                  {ike_crypto_pfile}
-                </ikev1>
-                <ikev2>
-                  <dpd>
-                    <enable>yes</enable>
-                  </dpd>
-                  {ike_crypto_pfile}
-                </ikev2>
-                {ike_version}
-              </protocol>
-              <protocol-common>
-                <nat-traversal>
-                  <enable>no</enable>
-                </nat-traversal>
-                <fragmentation>
-                  <enable>no</enable>
-                </fragmentation>
-              </protocol-common>
-              <local-address>
-                <interface>{ike_iface}</interface>
-                <ip>{ip_local}{prefix}</ip>
-              </local-address>
-              <peer-address>
-                <ip>{ip_peer}</ip>
-              </peer-address>
-            </entry>"""
-
-        element_b = f"""
-            <entry name='{ike_name}'>
-              <authentication>
-                <pre-shared-key>
-                  <key>{ike_key}</key>
-                </pre-shared-key>
-              </authentication>
-              <protocol>
-                <ikev1>
-                  <dpd>
-                    <enable>yes</enable>
-                  </dpd>
-                  {ike_crypto_pfile}
-                </ikev1>
-                <ikev2>
-                  <dpd>
-                    <enable>yes</enable>
-                  </dpd>
-                  {ike_crypto_pfile}
-                </ikev2>
-                {ike_version}
-              </protocol>
-              <protocol-common>
-                <nat-traversal>
-                  <enable>no</enable>
-                </nat-traversal>
-                <fragmentation>
-                  <enable>no</enable>
-                </fragmentation>
-              </protocol-common>
-              <local-address>
-                <interface>{ike_iface}</interface>
-                <ip>{ip_peer}{prefix}</ip>
-              </local-address>
-              <peer-address>
-                <ip>{ip_local}</ip>
-              </peer-address>
-            </entry>"""
+        element_a = element_format.format(ike_name, ike_iface, ip_local, ip_peer)
+        element_b = element_format.format(ike_name, ike_iface, ip_peer, ip_local)
 
         clean_element = f"@name='{ike_name}' or "
 
@@ -189,10 +163,10 @@ def pan_vpn_ike_gw():
             print('.', end="", flush=True)
             ti = timeit.default_timer()
 
-        count = ike + 1
-
         if n > cf['LARGE_N'] and count % s == 0:
             print("{:.0%}".format(count / n), end="", flush=True)
+
+        count += 1
 
     for data in [data_a, data_b]:
         data['clean_xml'].append("@name='_z']")

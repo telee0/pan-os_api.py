@@ -18,7 +18,7 @@ from os import makedirs
 import requests
 import timeit
 
-verbose, debug = True, False
+verbose, debug = False, False
 
 
 def init_data(pre, associations=(), target='PA1', seq=0):
@@ -121,7 +121,7 @@ def init_data(pre, associations=(), target='PA1', seq=0):
 
 
 def write_data(data, target='PA1'):
-    global verbose
+    global verbose, debug
 
     if target not in cf:
         print("write_data: {}: target not found. Please review config file {}.".format(target, cf['CF_PATH']))
@@ -137,7 +137,7 @@ def write_data(data, target='PA1'):
             if len(subdir) > 1:
                 makedirs(target_dir + subdir, exist_ok=True)
 
-    if verbose:
+    if debug:
         print(json.dumps(data, indent=4))
 
     files, script, scripts = '_files', 'script', '_scripts'
@@ -164,7 +164,7 @@ def write_data(data, target='PA1'):
         if len(cf[scripts]) == 0 or cf[scripts][-1] != path:  # check if the script is already there in the master
             cf[scripts].append(path)
 
-    if verbose:
+    if debug:
         print(json.dumps(data, indent=4))
 
     cf['_push'].append(data['_push'])
@@ -194,17 +194,17 @@ def gen_xpath(shared, local_path, dg=None):
 
 
 def push_data():
-    global verbose
+    global cf
+    global verbose, debug
 
     t0 = timeit.default_timer()
     ti = t0
-
-    print()
 
     for p in cf['_push']:
         url = p['url']
         target = p['target']
         prefix = "PA2/" if target == "PA2" else ""
+        status = 'ok'
         for cfg in p['cfg_list']:
             print(f"\nPushing {cfg} to {target}..", end=" ", flush=True)
             paths = p['pth_list'][cfg]
@@ -219,19 +219,25 @@ def push_data():
                 from urllib.parse import parse_qsl
                 params = dict(parse_qsl(params_line))
 
+                if params['key'] == 'None':
+                    status = 'skip'
+                    if verbose:
+                        print("API key invalid ", end="")
+                    break
+
                 xml_data = ''.join(lines[1:]).strip()
 
                 data_key = "element" if cfg != "uid" else "cmd"
                 post_data = {**params, data_key: xml_data}
 
-                if verbose:
+                if debug:
                     print(json.dumps(post_data, indent=4))
 
                 response = requests.post(
                     url,
                     data=post_data,
                     verify=False,  # equivalent to --no-check-certificate
-                    timeout=5,
+                    timeout=cf['PUSH_TIMEOUT'],
                 )
                 with open(out_path, 'ab') as f:
                     f.write(response.content + b"\n")
@@ -241,7 +247,7 @@ def push_data():
                 with open(log_path, 'a') as log_file:
                     log_file.write(f"Request failed: {e}\n")
 
-        print(cf['_msgs']['ok'] % (timeit.default_timer() - ti), end="")
+        print(cf['_msgs'][status] % (timeit.default_timer() - ti), end="")
         ti = timeit.default_timer()
 
 

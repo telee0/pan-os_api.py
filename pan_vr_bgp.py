@@ -13,6 +13,7 @@ Details at https://github.com/telee0/pan-os_api.py.git
 """
 
 from pan_data import init_data, write_data
+from pan_ip import generate_ip, ip_version
 import timeit
 
 verbose, debug = True, False
@@ -45,7 +46,6 @@ def pan_vr_bgp():
 
     x = cf['XPATH_TPL']
     lhost = cf['LHOST']
-    # vr = cf['VR_BGP_VR']
 
     xpath = "{0}/config/devices/entry[@name='{1}']" \
         "/network/virtual-router/entry[@name='{2}']/protocol/bgp/peer-group".format(x, lhost, vr)
@@ -62,7 +62,24 @@ def pan_vr_bgp():
     data['xml'][0] = data['xml'][0] % xpath
     data['clean_xml'][0] = data['clean_xml'][0] % xpath
 
-    # static parameters: move any of these back to the loop if they are dynamic
+    # static variables in the loop
+    #
+    nm = n * m
+    s = nm // 10  # increment per slice: 10%, 20%, etc..
+
+    # flatten the interface list
+    #
+    interfaces = []
+    for if_name, if_i, if_n in cf['VR_BGP_PEER_LOCAL_INTERFACE_LIST']:
+        for if_j in range(if_i, if_n + 1):
+            interfaces.append(if_name.format(if_j))
+
+    n_ifaces = len(interfaces)
+
+    ip_list_local = generate_ip(f"{cf['VR_BGP_PEER_LOCAL_IP']}", n_ifaces, 1, with_prefix=True, reset_offset=False)
+    ip_list_peer = generate_ip(f"{cf['VR_BGP_PEER_PEER_IP']}", nm, m, with_prefix=False, reset_offset=False)
+
+    # shared parameters: move any of these back to the loop if they are dynamic
     #
     group_type = ""
     if 'VR_BGP_PEER_GROUP_TYPE' in cf and cf['VR_BGP_PEER_GROUP_TYPE'] == 'ebgp':
@@ -73,15 +90,22 @@ def pan_vr_bgp():
                         <export-nexthop>resolve</export-nexthop>
                       </ebgp>"""
 
-    # static variables in the loop
+    # shared parameters for peers
     #
-    nm = n * m
-    s = nm // 10  # increment per slice: 10%, 20%, etc..
+    ip_ver = 4
+    if len(ip_list_local) > 0:
+        ip_ver = ip_version(ip_list_local[0])
+
+    enable_mp_bgp = "no"
+    address_family = "ipv4"
+    if ip_ver == 6:
+        enable_mp_bgp = "yes"
+        address_family = "ipv6"
 
     count = 1
 
-    for i in range(1, n + 1):
-        group_name = cf['VR_BGP_PEER_GROUP_NAME'] % i
+    for i in range(n):
+        group_name = cf['VR_BGP_PEER_GROUP_NAME'].format(i + cf['VR_BGP_PEER_GROUP_NAME_i'])
 
         element = f"""
                   <entry name='{group_name}'>
@@ -101,88 +125,75 @@ def pan_vr_bgp():
         # peers of each group
         #
 
-        xml_peer = f"xml_peer{i}"
+        xml_peer = f"xml_peer{i+1}"
 
         xpath_peer = "{0}/entry[@name='{1}']/peer".format(xpath, group_name)
 
         data[xml_peer][0] = data[xml_peer][0] % xpath_peer
 
-        ip_octet_j = cf['VR_BGP_PEER_LOCAL_IP_OCTET_j']
-        ip_octet_k = cf['VR_BGP_PEER_LOCAL_IP_OCTET_k']
+        for j in range(m):
+            k = i * m + j
 
-        peers = 1
+            peer_name = cf['VR_BGP_PEER_NAME'].format(i + 1, j)
+            peer_local_interface = interfaces[k % n_ifaces]
+            peer_local_ip = ip_list_local[k % n_ifaces]
+            peer_peer_ip = ip_list_peer[k]
+            peer_as = int(cf['VR_BGP_PEER_AS']) + k
 
-        for j in range(ip_octet_j, 256):
-            for k in range(ip_octet_k, 256):
-                if peers > m:
-                    break  # 2
+            element = f"""
+                  <entry name='{peer_name}'>
+                    <connection-options>
+                      <incoming-bgp-connection>
+                        <remote-port>0</remote-port>
+                        <allow>yes</allow>
+                      </incoming-bgp-connection>
+                      <outgoing-bgp-connection>
+                        <local-port>0</local-port>
+                        <allow>yes</allow>
+                      </outgoing-bgp-connection>
+                      <multihop>0</multihop>
+                      <keep-alive-interval>30</keep-alive-interval>
+                      <open-delay-time>0</open-delay-time>
+                      <hold-time>90</hold-time>
+                      <idle-hold-time>15</idle-hold-time>
+                      <min-route-adv-interval>30</min-route-adv-interval>
+                    </connection-options>
+                    <subsequent-address-family-identifier>
+                      <unicast>yes</unicast>
+                      <multicast>no</multicast>
+                    </subsequent-address-family-identifier>
+                    <local-address>
+                      <ip>{peer_local_ip}</ip>
+                      <interface>{peer_local_interface}</interface>
+                    </local-address>
+                    <peer-address>
+                      <ip>{peer_peer_ip}</ip>
+                    </peer-address>
+                    <bfd>
+                      <profile>Inherit-vr-global-setting</profile>
+                    </bfd>
+                    <max-prefixes>5000</max-prefixes>
+                    <enable>yes</enable>
+                    <peer-as>{peer_as}</peer-as>
+                    <enable-mp-bgp>{enable_mp_bgp}</enable-mp-bgp>
+                    <address-family-identifier>{address_family}</address-family-identifier>
+                    <enable-sender-side-loop-detection>yes</enable-sender-side-loop-detection>
+                    <reflector-client>non-client</reflector-client>
+                    <peering-type>unspecified</peering-type>
+                  </entry>"""
 
-                peer_name = cf['VR_BGP_PEER_NAME'] % (i, peers)
-                peer_local_interface = cf['VR_BGP_PEER_LOCAL_INT'] % peers
-                peer_local_ip = cf['VR_BGP_PEER_LOCAL_IP'] % (j, k)
-                peer_peer_ip = cf['VR_BGP_PEER_PEER_IP'] % (j, k)
-                peer_as = cf['VR_BGP_PEER_AS']
+            data[xml_peer].append(element)
 
-                element = f"""
-                      <entry name='{peer_name}'>
-                        <connection-options>
-                          <incoming-bgp-connection>
-                            <remote-port>0</remote-port>
-                            <allow>yes</allow>
-                          </incoming-bgp-connection>
-                          <outgoing-bgp-connection>
-                            <local-port>0</local-port>
-                            <allow>yes</allow>
-                          </outgoing-bgp-connection>
-                          <multihop>0</multihop>
-                          <keep-alive-interval>30</keep-alive-interval>
-                          <open-delay-time>0</open-delay-time>
-                          <hold-time>90</hold-time>
-                          <idle-hold-time>15</idle-hold-time>
-                          <min-route-adv-interval>30</min-route-adv-interval>
-                        </connection-options>
-                        <subsequent-address-family-identifier>
-                          <unicast>yes</unicast>
-                          <multicast>no</multicast>
-                        </subsequent-address-family-identifier>
-                        <local-address>
-                          <ip>{peer_local_ip}</ip>
-                          <interface>{peer_local_interface}</interface>
-                        </local-address>
-                        <peer-address>
-                          <ip>{peer_peer_ip}</ip>
-                        </peer-address>
-                        <bfd>
-                          <profile>Inherit-vr-global-setting</profile>
-                        </bfd>
-                        <max-prefixes>5000</max-prefixes>
-                        <enable>yes</enable>
-                        <peer-as>{peer_as}</peer-as>
-                        <enable-mp-bgp>no</enable-mp-bgp>
-                        <address-family-identifier>ipv4</address-family-identifier>
-                        <enable-sender-side-loop-detection>yes</enable-sender-side-loop-detection>
-                        <reflector-client>non-client</reflector-client>
-                        <peering-type>unspecified</peering-type>
-                      </entry>"""  # format(peer_name, peer_local_ip, peer_local_interface, peer_peer_ip, peer_as)
+            time_elapsed = timeit.default_timer() - ti
 
-                data[xml_peer].append(element)
+            if time_elapsed > 1:
+                print('.', end="", flush=True)
+                ti = timeit.default_timer()
 
-                peers += 1
+            if nm > cf['LARGE_N'] and count % s == 0:
+                print("{:.0%}".format(count / nm), end="", flush=True)
 
-                time_elapsed = timeit.default_timer() - ti
-
-                if time_elapsed > 1:
-                    print('.', end="", flush=True)
-                    ti = timeit.default_timer()
-
-                if nm > cf['LARGE_N'] and count % s == 0:
-                    print("{:.0%}".format(count / nm), end="", flush=True)
-
-                count += 1
-            else:
-                ip_octet_k = 0  # normalize k for next j
-                continue
-            break
+            count += 1
 
     data['clean_xml'].append("@name='_z']")
     data['dump'].append("</peer-group></bgp></protocol>")

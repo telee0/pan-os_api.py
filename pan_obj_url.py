@@ -63,12 +63,11 @@ def pan_obj_url(dg=None, seq=0):
     categories = 1
 
     for i in range(n):
-
-        url_category = (cf['URL_CAT_NAME'] + suf) % (name_i + i)
+        url_category = (cf['URL_CAT_NAME'] + suf).format(i + name_i)
         members = []
 
         for j in range(m):
-            site = cf['URL_ENTRY'] % (entry_j + j, name_i + i)
+            site = cf['URL_ENTRY'].format(j + entry_j, i + name_i)
             members.append("<member>{0}</member>".format(site))
             data['url'].append("http://{0}".format(site))
 

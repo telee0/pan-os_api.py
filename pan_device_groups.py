@@ -45,8 +45,8 @@ def pan_device_groups():
     #
     s = n // 10  # increment per slice: 10%, 20%, etc..
 
-    for i in range(1, n + 1):
-        group_name = cf['DG_NAME'] % i
+    for i in range(n):
+        group_name = cf['DG_NAME'].format(i + cf['DG_NAME_i'])
 
         element = "<entry name='{0}'><devices/></entry>".format(group_name)
         clean_element = "@name='{0}' or ".format(group_name)
@@ -61,7 +61,7 @@ def pan_device_groups():
             print('.', end="", flush=True)
             ti = timeit.default_timer()
 
-        if n > cf['LARGE_N'] and i % s == 0:
+        if n > cf['LARGE_N'] and (i + 1) % s == 0:
             print("{:.0%}".format(i / n), end="", flush=True)
 
     data['clean_xml'].append("@name='_z']")

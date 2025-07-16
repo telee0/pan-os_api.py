@@ -54,17 +54,14 @@ def pan_obj_addr_groups(dg=None, seq=0):
     suf = f"-{seq}" if seq > 0 else ''
     m = cf['ADDR_GROUP_MEMBER_COUNT']
 
-    addresses = 1
-
-    for i in range(1, n + 1):
-
-        group_name = (cf['ADDR_GROUP_NAME'] + suf) % i
+    for i in range(n):
+        group_name = (cf['ADDR_GROUP_NAME'] + suf).format(i + cf['ADDR_GROUP_NAME_i'])
         members = []
 
-        for _ in range(m):
-            addr_name = (cf['ADDR_NAME'] + suf) % addresses
+        for j in range(m):
+            addresses = (i * m + j) % cf['N_OBJ_ADDRESS']
+            addr_name = (cf['ADDR_NAME'] + suf).format(cf['ADDR_NAME_i'] + addresses)
             members.append("<member>{0}</member>".format(addr_name))
-            addresses = addresses % cf['N_OBJ_ADDRESS'] + 1
 
         element = "<entry name='{0}'><static>{1}</static></entry>".format(group_name, "\n".join(members))
         clean_element = "@name='{0}' or ".format(group_name)
@@ -79,7 +76,7 @@ def pan_obj_addr_groups(dg=None, seq=0):
             print('.', end="", flush=True)
             ti = timeit.default_timer()
 
-        if n > cf['LARGE_N'] and i % s == 0:
+        if n > cf['LARGE_N'] and (i + 1) % s == 0:
             print("{:.0%}".format(i / n), end="", flush=True)
 
     data['clean_xml'].append("@name='_z']")

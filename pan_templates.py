@@ -45,8 +45,8 @@ def pan_templates():
     #
     s = n // 10  # increment per slice: 10%, 20%, etc..
 
-    for i in range(1, n + 1):
-        template_name = cf['TPL_NAME'] % i
+    for i in range(n):
+        template_name = cf['TPL_NAME'].format(i + cf['TPL_NAME_i'])
 
         element = "<entry name='{0}'></entry>".format(template_name)
         clean_element = "@name='{0}' or ".format(template_name)
@@ -61,7 +61,7 @@ def pan_templates():
             print('.', end="", flush=True)
             ti = timeit.default_timer()
 
-        if n > cf['LARGE_N'] and i % s == 0:
+        if n > cf['LARGE_N'] and (i + 1) % s == 0:
             print("{:.0%}".format(i / n), end="", flush=True)
 
     data['clean_xml'].append("@name='_z']")

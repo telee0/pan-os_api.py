@@ -14,6 +14,7 @@ Details at https://github.com/telee0/pan-os_api.py.git
 
 from pan_data import init_data, write_data
 from pan_data import gen_xpath
+from pan_ip import generate_net
 import timeit
 
 verbose, debug = True, False
@@ -51,6 +52,15 @@ def pan_rules_sec(dg=None, seq=0):
     data['xml'][0] = data['xml'][0] % xpath
     data['clean_xml'][0] = data['clean_xml'][0] % xpath
 
+    net_list_src = generate_net(cf['SEC_SOURCE'], n, with_prefix=True)
+    if 'SEC_DESTINATION' in cf:
+        if cf['SEC_DESTINATION'] == "any":
+            net_list_dst = ['any'] * n
+        else:
+            net_list_dst = generate_net(cf['SEC_DESTINATION'], n, with_prefix=True)
+    else:
+        net_list_dst = ['any'] * n
+
     # static parameters: move them back to the loop if they are dynamic
     #
     dst_zone = cf['SEC_DST_ZONE']
@@ -62,68 +72,53 @@ def pan_rules_sec(dg=None, seq=0):
     #
     s = n // 10  # increment per slice: 10%, 20%, etc..
 
-    rules = 1
+    for i in range(n):
+        rule_name = (cf['SEC_NAME'] + suf).format(i + cf['SEC_NAME_i'])
+        src, dst = net_list_src[i], net_list_dst[i]
 
-    for i in range(256):
-        for j in range(256):
-            if rules > n:
-                break  # 2
+        element = f"""
+            <entry name='{rule_name}'>
+              <to>
+                <member>{dst_zone}</member>
+              </to>
+              <from>
+                <member>{src_zone}</member>
+              </from>
+              <source>
+                <member>{src}</member>
+              </source>
+              <destination>
+                <member>{dst}</member>
+              </destination>
+              <source-user>
+                <member>any</member>
+              </source-user>
+              <category>
+                <member>any</member>
+              </category>
+              <application>
+                <member>any</member>
+              </application>
+              <service>
+                <member>{service}</member>
+              </service>
+              <action>{action}</action>
+            </entry>"""
 
-            rule_name = (cf['SEC_NAME'] + suf) % rules
-            src = cf['SEC_SOURCE'] % (i, j)
-            dst = cf['SEC_DESTINATION'] % (i, j)
+        clean_element = f"@name='{rule_name}' or "
 
-            element = f"""
-                <entry name='{rule_name}'>
-                  <to>
-                    <member>{dst_zone}</member>
-                  </to>
-                  <from>
-                    <member>{src_zone}</member>
-                  </from>
-                  <source>
-                    <member>{src}</member>
-                  </source>
-                  <destination>
-                    <member>{dst}</member>
-                  </destination>
-                  <source-user>
-                    <member>any</member>
-                  </source-user>
-                  <category>
-                    <member>any</member>
-                  </category>
-                  <application>
-                    <member>any</member>
-                  </application>
-                  <service>
-                    <member>{service}</member>
-                  </service>
-                  <hip-profiles>
-                    <member>any</member>
-                  </hip-profiles>
-                  <action>{action}</action>
-                </entry>"""  # .format(rule_name, dst_zone, src_zone, src, dst, service, action)
+        data['xml'].append(element)
+        data['clean_xml'].append(clean_element)
+        data['dump'].append(element)
 
-            clean_element = f"@name='{rule_name}' or "
+        time_elapsed = timeit.default_timer() - ti
 
-            data['xml'].append(element)
-            data['clean_xml'].append(clean_element)
-            data['dump'].append(element)
+        if time_elapsed > 1:
+            print('.', end="", flush=True)
+            ti = timeit.default_timer()
 
-            time_elapsed = timeit.default_timer() - ti
-
-            if time_elapsed > 1:
-                print('.', end="", flush=True)
-                ti = timeit.default_timer()
-
-            if n > cf['LARGE_N'] and rules % s == 0:
-                print("{:.0%}".format(rules / n), end="", flush=True)
-
-            rules += 1
-        else:
-            continue
-        break
+        if n > cf['LARGE_N'] and (i + 1) % s == 0:
+            print("{:.0%}".format(i / n), end="", flush=True)
 
     data['clean_xml'].append("@name='_z']")
     data['dump'].append("</rules></security>")

@@ -26,7 +26,12 @@ def pan_api(access):
     url = "https://{0}/api/?type=keygen".format(host)
 
     try:
-        response = requests.post(url, data={'user': user, 'password': password}, verify=False)
+        response = requests.post(
+            url,
+            data={'user': user, 'password': password},
+            verify=False,
+            timeout = cf['PUSH_TIMEOUT'],
+        )
         if debug:
             print("pan_api: response: ", response.text)
     except Exception as e:
@@ -37,7 +42,7 @@ def pan_api(access):
     result = xml.fromstring(response.content)
     api_key = result.find('result/key')
 
-    return api_key.text if api_key is not None else None
+    return api_key.text if api_key is not None else ""
 
 
 def go():
@@ -48,11 +53,10 @@ def go():
                 desc = " ({0})".format(cf[pa]['DESC'])
             print("{0} = {1}{2}".format(pa, cf[pa]['HOST'], desc))
             api_key = pan_api([cf[pa]['HOST'], cf[pa]['USER'], cf[pa]['PASS']])
-            if api_key is not None and len(api_key) > 0:
-                cf[pa]['KEY'] = api_key
-                cf[pa]['URL'] = "https://{0}/api".format(cf[pa]['HOST'])
-            else:
+            if not api_key:
                 print("{0}: API key not set. Please check {1} in {2}.".format(cf[pa]['HOST'], pa, cf['CF_PATH']))
+            cf[pa]['KEY'] = api_key
+            cf[pa]['URL'] = "https://{0}/api".format(cf[pa]['HOST'])
 
 
 if __name__ == '__main__':

@@ -48,7 +48,7 @@ def init():
         for i, attr in enumerate(x):
             cf[pa][attr] = z[pa][i] or cf[pa][attr] or y[i]
             value = cf[pa][attr]
-            if verbose:
+            if verbose and attr != p:
                 print(f"\tinit: value = {value}")
             if not value:
                 print("init: access undefined or empty")
@@ -110,7 +110,9 @@ def init():
             },
         },
         m: {
-            'ok': 'OK (%.2fs)'
+            'ok': 'OK (%.2fs)',
+            'fail': 'FAILED (%.2fs)',
+            'skip': 'SKIPPED (%.2fs)'
         },
         s: [],
         p: [],
@@ -222,7 +224,11 @@ if __name__ == '__main__':
     pan_local_users.go()
     pan_uid.go()
 
-    push_data()
+    if verbose:
+        print(f"\n\ncf['PUSH_ENABLED'] = {cf['PUSH_ENABLED']}")
+
+    if cf['PUSH_ENABLED']:
+        push_data()
 
     if verbose:
         print()

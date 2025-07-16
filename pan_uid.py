@@ -59,7 +59,7 @@ def pan_uid():
         ip_list = generate_ip(cf['UID_IP'][i], uid_entries, uid_entries, with_prefix=False)
 
         for j in range(uid_entries):
-            uid_user = cf['UID_USER'].format(domain, j + 1)
+            uid_user = cf['UID_USER'].format(domain, cf['UID_USER_j'] + j)
             uid_ip = ip_list[j]
 
             element = '<entry name="{0}" ip="{1}" timeout="{2}"/>'.format(uid_user, uid_ip, uid_timeout)

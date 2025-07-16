@@ -45,13 +45,21 @@ def pan_obj_svc(dg=None, seq=0):
 
     # static parameters: move them back to the loop if they are dynamic
     #
-    service_port_dst = cf['SERVICE_PORT_DST']
-    service_port_src = 0
+    service_port_i = cf['SERVICE_PORT_DST']
+    src_port_i = 0
+    src_port_format = ""
     if 'SERVICE_PORT_SRC' in cf and cf['SERVICE_PORT_SRC'] > 0:
-        service_port_src = cf['SERVICE_PORT_SRC']
-    service_protocol = "both"
-    if 'SERVICE_PROTOCOL' in cf and cf['SERVICE_PROTOCOL'] in ('both', 'tcp', 'udp'):
+        src_port_i = cf['SERVICE_PORT_SRC']
+        src_port_format = "<source-port>{0}</source-port>"
+    protocol_list = []
+    if 'SERVICE_PROTOCOL' in cf:
         service_protocol = cf['SERVICE_PROTOCOL']
+        if service_protocol == 'both':
+            protocol_list = ['tcp', 'udp']
+        elif service_protocol == 'tcp':
+            protocol_list = ['tcp']
+        elif service_protocol == 'udp':
+            protocol_list = ['udp']
 
     # static variables in the loop
     #
@@ -61,54 +69,34 @@ def pan_obj_svc(dg=None, seq=0):
     services = 1
 
     for i in range(n):
-        service_port = service_port_dst + i
+        service_port = service_port_i + i
+        source_port = src_port_format.format(src_port_i + i)
 
-        source_port = ""
-        if service_port_src > 0:
-            source_port = "<source-port>{0}</source-port>".format(service_port_src + i)
+        element_list, clean_element_list = [], []
 
-        element1, element2 = "", ""
-        clean_element1, clean_element2 = "", ""
-
-        if service_protocol in ('both', 'tcp'):
-            service_name = (cf['SERVICE_NAME'] + suf) % ("tcp", service_port)
-
-            element1 = f"""
+        for protocol in protocol_list:
+            service_name = (cf['SERVICE_NAME'] + suf).format(protocol, service_port)
+            element = f"""
       <entry name='{service_name}'>
         <protocol>
-          <tcp>
+          <{protocol}>
             <port>{service_port}</port>
             <override>
               <no/>
             </override>
             {source_port}
-          </tcp>
+          </{protocol}>
         </protocol>
-      </entry>"""  # .format(service_name, service_port, source_port)
+      </entry>"""
+            element_list.append(element)
+            clean_element_list.append("@name='{0}' or ".format(service_name))
 
-            clean_element1 = "@name='{0}' or ".format(service_name)
+        elements = "".join(element_list)
+        clean_elements = "".join(clean_element_list)
 
-        if service_protocol in ('both', 'udp'):
-            service_name = (cf['SERVICE_NAME'] + suf) % ("udp", service_port)
-
-            element2 = f"""
-      <entry name='{service_name}'>
-        <protocol>
-          <udp>
-            <port>{service_port}</port>
-            <override>
-              <no/>
-            </override>
-            {source_port}
-          </udp>
-        </protocol>
-      </entry>"""  # .format(service_name, service_port, source_port)
-
-            clean_element2 = "@name='{0}' or ".format(service_name)
-
-        data['xml'].append(element1 + element2)
-        data['clean_xml'].append(clean_element1 + clean_element2)
-        data['dump'].append(element1 + element2)
+        data['xml'].append(elements)
+        data['clean_xml'].append(clean_elements)
+        data['dump'].append(elements)
 
         time_elapsed = timeit.default_timer() - ti
 
