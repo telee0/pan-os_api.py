@@ -3,7 +3,7 @@
 Scripts rewritten in Python to generate PAN XML config and apply it through REST API
 
 ```
-python3 pan.py -c conf/pa.py -h 192.168.1.1 -u admin -v
+python3 pan.py -c conf/pa.py
 ```
 
 Supported config as follows.
@@ -24,6 +24,7 @@ Supported config as follows.
 * Policies > Security
 * Policies > NAT
 * Policies > PBF
+* Policies > Decryption
 * Network > VR > Static Routes
 * Network > VR > BGP peer groups x peers
 

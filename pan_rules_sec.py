@@ -2,7 +2,9 @@
 
 """
 
+pan-os_api v2.4 [20260509]
 pan-os_api v2.3 [20250607]
+pan-os_api v2.2 [20230717]
 
 Scripts to generate PA/Panorama config
 
@@ -53,11 +55,8 @@ def pan_rules_sec(dg=None, seq=0):
     data['clean_xml'][0] = data['clean_xml'][0] % xpath
 
     net_list_src = generate_net(cf['SEC_SOURCE'], n, with_prefix=True)
-    if 'SEC_DESTINATION' in cf:
-        if cf['SEC_DESTINATION'] == "any":
-            net_list_dst = ['any'] * n
-        else:
-            net_list_dst = generate_net(cf['SEC_DESTINATION'], n, with_prefix=True)
+    if 'SEC_DESTINATION' in cf and cf['SEC_DESTINATION'] != "any":
+        net_list_dst = generate_net(cf['SEC_DESTINATION'], n, with_prefix=True)
     else:
         net_list_dst = ['any'] * n
 

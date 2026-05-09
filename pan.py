@@ -2,7 +2,9 @@
 
 """
 
+pan-os_api v2.4 [20260509]
 pan-os_api v2.3 [20250607]
+pan-os_api v2.2 [20230717]
 
 Scripts to generate PA/Panorama config
 
@@ -193,6 +195,7 @@ if __name__ == '__main__':
     import pan_rules_sec
     import pan_rules_nat
     import pan_rules_pbf
+    import pan_rules_dec
     import pan_vpn_ike_gw
     import pan_vpn_ipsec_tun
     import pan_vr_static
@@ -217,6 +220,7 @@ if __name__ == '__main__':
     pan_rules_sec.go()
     pan_rules_nat.go()
     pan_rules_pbf.go()
+    pan_rules_dec.go()
     pan_vpn_ike_gw.go()
     pan_vpn_ipsec_tun.go()
     pan_vr_static.go()

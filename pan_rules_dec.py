@@ -22,31 +22,31 @@ import timeit
 verbose, debug = True, False
 
 
-def pan_rules_pbf(dg=None, seq=0):
-    key = 'N_RULES_PBF'
+def pan_rules_dec(dg=None, seq=0):
+    key = 'N_RULES_DEC'
 
     if key not in cf or cf[key] <= 0:
         return
 
     n = cf[key]
 
-    print("\nPolicies > PBF ({0})".format(n), end=" ", flush=True)
+    print("\nPolicies > Decryption ({0})".format(n), end=" ", flush=True)
 
     t0 = timeit.default_timer()
     ti = t0
 
-    pre = 'pbf'
+    pre = 'dec'
     suf = f"-{seq}" if seq > 0 else ''
 
     data = init_data(pre)
-    data['dump'].append("<pbf><rules>")
+    data['dump'].append("<decryption><rules>")
     data['script'] = [f'echo "Adding rules {pre}{suf} ({n}).."'] + data['script']
     data['clean_script'] = [f'echo "Deleting rules {pre}{suf} ({n}).."'] + data['clean_script']
 
-    shared = 'PBF_SHARED'
+    shared = 'DEC_SHARED'
     local_path = (
-        "{}/pbf/rules".format(cf['PBF_RULEBASE']),
-        "rulebase/pbf/rules",
+        "{}/decryption/rules".format(cf['DEC_RULEBASE']),
+        "rulebase/decryption/rules",
     )
 
     xpath = gen_xpath(shared, local_path, dg)
@@ -54,66 +54,76 @@ def pan_rules_pbf(dg=None, seq=0):
     data['xml'][0] = data['xml'][0] % xpath
     data['clean_xml'][0] = data['clean_xml'][0] % xpath
 
-    net_list_src = generate_net(cf['PBF_SOURCE'], n, with_prefix=True)
-    net_list_dst = [''] * n
+    net_list_src = generate_net(cf['DEC_SOURCE'], n, with_prefix=True)
+    if 'DEC_DESTINATION' in cf and cf['DEC_DESTINATION'] != "any":
+        net_list_dst = generate_net(cf['DEC_DESTINATION'], n, with_prefix=True)
+    else:
+        net_list_dst = ['any'] * n
 
     # static parameters: move them back to the loop if they are dynamic
     #
-    src_zone = cf['PBF_SRC_ZONE']
-    service = cf['PBF_SERVICE']
+    src_zone = cf['DEC_SRC_ZONE']
+    dst_zone = cf['DEC_DST_ZONE']
+    service = cf['DEC_SERVICE']
 
-    action = cf['PBF_ACTION']
-    action_format = "<no-pbf/>"
-    if action == "forward":
-        action_format = """
-                    <forward>
-                      <nexthop>
-                        <ip-address>{0}</ip-address>
-                      </nexthop>
-                      <egress-interface>{1}</egress-interface>
-                    </forward>"""
-        net_list_dst = generate_net(cf['PBF_DESTINATION'], n, with_prefix=True)
-    elif action == "discard":
-        action_format = "<discard/>"
-    egress = cf['PBF_EGRESS_INTERFACE']
-    next_hop = cf['PBF_NEXTHOP']
+    type_dec = cf['DEC_TYPE']
+    if cf['DEC_TYPE'] == 'ssl-inbound-inspection':
+        cert_list = []
+        for cert in cf['DEC_CERTIFICATES']:
+            cert_list.append(f"<member>{cert}</member>")
+        type_dec = f"""
+                    <{type_dec}>
+                      <certificates>{"\n".join(cert_list)}</certificates>
+                    </{type_dec}>"""
+    else:
+        type_dec = f"<{type_dec}/>"
+
+    action = cf['DEC_ACTION']
+    profile = cf['DEC_PROFILE']
+    disabled = cf['DEC_DISABLED']
 
     # static variables in the loop
     #
     s = n // 10  # increment per slice: 10%, 20%, etc..
 
     for i in range(n):
-        rule_name = (cf['PBF_NAME'] + suf).format(i + cf['PBF_NAME_i'])
+        rule_name = (cf['DEC_NAME'] + suf).format(i + cf['DEC_NAME_i'])
         src, dst = net_list_src[i], net_list_dst[i]
-        action = action_format.format(next_hop, egress)
 
         element = f"""
-            <entry name='{rule_name}'>
-              <action>{action}</action>
-              <from>
-                <zone>
-                  <member>{src_zone}</member>
-                </zone>
-              </from>
-              <enforce-symmetric-return>
-                <enabled>no</enabled>
-              </enforce-symmetric-return>
-              <source>
-                <member>{src}</member>
-              </source>
-              <destination>
-                <member>{dst}</member>
-              </destination>
-              <source-user>
-                <member>any</member>
-              </source-user>
-              <application>
-                <member>any</member>
-              </application>
-              <service>
-                <member>{service}</member>
-              </service>
-            </entry>"""
+                <entry name='{rule_name}'>
+                  <category>
+                    <member>any</member>
+                  </category>
+                  <service>
+                    <member>{service}</member>
+                  </service>
+                  <type>{type_dec}</type>
+                  <from>
+                    <member>{src_zone}</member>
+                  </from>
+                  <to>
+                    <member>{dst_zone}</member>
+                  </to>
+                  <source>
+                    <member>{src}</member>
+                  </source>
+                  <destination>
+                    <member>{dst}</member>
+                  </destination>
+                  <source-user>
+                    <member>any</member>
+                  </source-user>
+                  <action>{action}</action>
+                  <profile>{profile}</profile>
+                  <disabled>{disabled}</disabled>
+                  <source-hip>
+                    <member>any</member>
+                  </source-hip>
+                  <destination-hip>
+                    <member>any</member>
+                  </destination-hip>
+                </entry>"""
 
         clean_element = f"@name='{rule_name}' or "
 
@@ -131,7 +141,7 @@ def pan_rules_pbf(dg=None, seq=0):
             print("{:.0%}".format(i / n), end="", flush=True)
 
     data['clean_xml'].append("@name='_z']")
-    data['dump'].append("</rules></pbf>")
+    data['dump'].append("</rules></decryption>")
 
     write_data(data)
 
@@ -159,10 +169,10 @@ def go():
         if shared not in cf or not cf[shared]:
             for i in range(1, cf['N_PAN_DG'] + 1):
                 dg = cf['DG_NAME'] % i
-                pan_rules_pbf(dg, i)
+                pan_rules_dec(dg, i)
             return
 
-    pan_rules_pbf()
+    pan_rules_dec()
 
 
 if __name__ == '__main__':
