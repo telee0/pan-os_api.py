@@ -2,7 +2,9 @@
 
 """
 
+pan-os_api v2.4 [20260509]
 pan-os_api v2.3 [20250607]
+pan-os_api v2.2 [20230717]
 
 Scripts to generate PA/Panorama config
 
@@ -32,6 +34,7 @@ Objects > Custom URL Category
 Policies > Security
 Policies > NAT
 Policies > PBF
+Policies > Decryption
 Network > VR > Static Routes
 Network > VR > BGP peer groups x peers
 
@@ -48,8 +51,7 @@ https://loop.paloaltonetworks.com/docs/DOC-3950
 """
 
 cf = {
-    'TARGET': "PA",
-    # 'TARGET': "PANORAMA",
+    'TARGET': ["PA", "PANORAMA"][0],
 
     'PA1': {
         'HOST': "192.168.1.1",
@@ -85,14 +87,12 @@ cf.update({
 
     # --------------------------------------------------------------------------------
 
-    'CONFIG_VERSION': "9.1.0",
+    'CONFIG_VERSION': ["11.2.0", "9.1.0"][0],
     'LHOST': "localhost.localdomain",
     'VSYS': "vsys1",
 
-    'DEFAULT_ZONE1': "L3-Trust",
-    'DEFAULT_ZONE2': "L3-Untrust",
-    # 'DEFAULT_ZONE1': "L3-trust",
-    # 'DEFAULT_ZONE2': "L3-untrust",
+    'DEFAULT_ZONE1': ["L3-Trust", "L3-trust"][0],
+    'DEFAULT_ZONE2': ["L3-Untrust", "L3-untrust"][0],
     'DEFAULT_ZONE3': "VPN",
 
     'DEFAULT_VR': "default",
@@ -125,6 +125,7 @@ cf.update({
     'N_RULES_SEC': 10,
     'N_RULES_NAT': 10,
     'N_RULES_PBF': 10,
+    'N_RULES_DEC': 10,
 
     # virtual router config
     #
@@ -332,8 +333,7 @@ cf.update({
     'SEC_DST_ZONE': cf['DEFAULT_ZONE2'],
     'SEC_SOURCE': "1.1.0.0/24",
     'SEC_DESTINATION': ["2.2.0.0/24", "any"][1],  # "any" can be applied to all rules
-    'SEC_SERVICE': "any",
-    # 'SEC_SERVICE': "application-default",
+    'SEC_SERVICE': ["any", "application-default"][0],
     'SEC_ACTION': ["deny", "allow"][1],  # pick one as the action of all rules
     # 'SEC_SHARED': True,
 
@@ -360,6 +360,22 @@ cf.update({
     'PBF_EGRESS_INTERFACE': "ethernet1/11",
     'PBF_NEXTHOP': "100.1.0.100",
     # 'PBF_SHARED': True,
+
+    # 'N_RULES_DEC': 0,
+    'DEC_RULEBASE': "pre-rulebase",  # pre-rulebase or post-rulesbase for Panorama
+    'DEC_NAME': "DEC_Rule-{0:03d}",
+    'DEC_NAME_i': 1,
+    'DEC_SRC_ZONE': cf['DEFAULT_ZONE1'],
+    'DEC_DST_ZONE': ["any", cf['DEFAULT_ZONE2']][0],
+    'DEC_SOURCE': "11.11.0.0/24",
+    'DEC_DESTINATION': ["any", "22.22.0.0/24"][0],
+    'DEC_SERVICE': "any",
+    'DEC_ACTION': ["decrypt", "no-decrypt"][0],  # pick one as the action of all rules
+    'DEC_TYPE': ["ssl-forward-proxy", "ssl-inbound-inspection", "ssh-proxy"][0],
+    'DEC_PROFILE': "default",
+    'DEC_CERTIFICATES': ["PA cert GP"],
+    'DEC_DISABLED': ["no", "yes"][0],
+    # 'DEC_SHARED': True,
 
     # --------------------------------------------------------------------------------
     #
@@ -415,7 +431,7 @@ cf.update({
         "7.7.0.1/16",
         "8.8.0.1/16",
         ],
-    'UID_TIMEOUT': "600",  # timeout in mins. 600 means 600 minutes
+    'UID_TIMEOUT': ["600", "3600"][0],  # timeout in mins. 600 means 600 minutes
 })
 
 # --------------------------------------------------------------------------------
